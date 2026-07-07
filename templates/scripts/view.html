@@ -1,1 +1,22 @@
-{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between"><h3>{{item.titulo}}</h3><div>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('scripts_editar',id=item.id)}}">Editar</a><form class="d-inline" method="post" action="{{url_for('scripts_excluir',id=item.id)}}"><button class="btn btn-danger">Excluir</button></form>{% endif %}</div></div><div class="card p-3"><p><b>Banco:</b> {{item.tipo_banco}}</p><h5>Descrição</h5><p>{{item.descricao}}</p><h5>Observações</h5><p>{{item.observacoes}}</p><button class="btn btn-outline-secondary mb-3" onclick="navigator.clipboard.writeText(Array.from(document.querySelectorAll('.sql-code')).map(e=>e.innerText).join('\n\n'))">Copiar todos</button>{% for c in item.consultas|sort(attribute='ordem') %}<div class="mb-3"><div class="d-flex justify-content-between"><h5>{{c.titulo_consulta}}</h5><button class="btn btn-sm btn-outline-primary" onclick="copiarTexto('sql{{c.id}}')">Copiar</button></div><pre id="sql{{c.id}}" class="pre-sql sql-code">{{c.codigo_sql}}</pre></div>{% endfor %}</div>{% endblock %}
+{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between">
+    <h3>{{item.titulo}}</h3>
+    <div>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('scripts_editar',id=item.id)}}">Editar</a>
+        <form class="d-inline" method="post" action="{{url_for('scripts_excluir',id=item.id)}}"><button
+                class="btn btn-danger">Excluir</button></form>{% endif %}
+    </div>
+</div>
+<div class="card p-3">
+    <p><b>Banco:</b> {{item.tipo_banco}}</p>
+    <h5>Descrição</h5>
+    <p>{{item.descricao}}</p>
+    <h5>Observações</h5>
+    <p>{{item.observacoes}}</p><button class="btn btn-outline-secondary mb-3"
+        onclick="navigator.clipboard.writeText(Array.from(document.querySelectorAll('.sql-code')).map(e=>e.innerText).join('\n\n'))">Copiar
+        todos</button>{% for c in item.consultas|sort(attribute='ordem') %}<div class="mb-3">
+        <div class="d-flex justify-content-between">
+            <h5>{{c.titulo_consulta}}</h5><button class="btn btn-sm btn-outline-primary"
+                onclick="copiarTexto('sql{{c.id}}')">Copiar</button>
+        </div>
+        <pre id="sql{{c.id}}" class="pre-sql sql-code">{{c.codigo_sql}}</pre>
+    </div>{% endfor %}
+</div>{% endblock %}

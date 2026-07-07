@@ -1,1 +1,26 @@
-{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between"><h3>Banco de Dados Mapeados</h3>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('banco_form')}}">Novo</a>{% endif %}</div><div class="card mt-3"><table class="table mb-0"><thead><tr><th>Nome</th><th>Tipo</th><th>Descrição</th><th></th></tr></thead><tbody>{% for i in itens %}<tr><td>{{i.nome}}</td><td>{{i.tipo_banco}}</td><td>{{i.descricao}}</td><td>{% if is_admin %}<a class="btn btn-sm btn-outline-primary" href="{{url_for('banco_form',id=i.id)}}">Editar</a><form class="d-inline" method="post" action="{{url_for('banco_excluir',id=i.id)}}"><button class="btn btn-sm btn-outline-danger">Excluir</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% endblock %}
+{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between">
+    <h3>Banco de Dados Mapeados</h3>{% if is_admin %}<a class="btn btn-primary"
+        href="{{url_for('banco_form')}}">Novo</a>{% endif %}
+</div>
+<div class="card mt-3">
+    <table class="table mb-0">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Descrição</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>{% for i in itens %}<tr>
+                <td>{{i.nome}}</td>
+                <td>{{i.tipo_banco}}</td>
+                <td>{{i.descricao}}</td>
+                <td>{% if is_admin %}<a class="btn btn-sm btn-outline-primary"
+                        href="{{url_for('banco_form',id=i.id)}}">Editar</a>
+                    <form class="d-inline" method="post" action="{{url_for('banco_excluir',id=i.id)}}"><button
+                            class="btn btn-sm btn-outline-danger">Excluir</button></form>{% endif %}
+                </td>
+            </tr>{% endfor %}</tbody>
+    </table>
+</div>{% endblock %}

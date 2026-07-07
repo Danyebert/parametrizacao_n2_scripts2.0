@@ -1,1 +1,24 @@
-{% extends 'base.html' %}{% block content %}<h3>Dashboard</h3><p class="text-muted">Central interna de documentação técnica para equipe N2.</p><div class="row g-3"><div class="col-md-3"><div class="card p-3"><b>Correções N2</b><h2>{{correcoes}}</h2></div></div><div class="col-md-3"><div class="card p-3"><b>Scripts SQL</b><h2>{{scripts}}</h2></div></div><div class="col-md-3"><div class="card p-3"><b>Bancos mapeados</b><h2>{{bancos}}</h2></div></div><div class="col-md-3"><div class="card p-3"><b>Arquivos</b><h2>{{downloads}}</h2></div></div></div>{% endblock %}
+{% extends 'base.html' %}{% block content %}<h3>Dashboard</h3>
+<p class="text-muted">Central interna de documentação técnica para equipe N2.</p>
+<div class="row g-3">
+    <div class="col-md-3">
+        <div class="card p-3"><b>Correções N2</b>
+            <h2>{{correcoes}}</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3"><b>Scripts SQL</b>
+            <h2>{{scripts}}</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3"><b>Bancos mapeados</b>
+            <h2>{{bancos}}</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3"><b>Arquivos</b>
+            <h2>{{downloads}}</h2>
+        </div>
+    </div>
+</div>{% endblock %}

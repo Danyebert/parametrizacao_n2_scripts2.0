@@ -1,1 +1,24 @@
-{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between"><h3>Scripts SQL</h3>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('scripts_novo')}}">Novo Script</a>{% endif %}</div><form class="my-3"><input class="form-control" name="busca" placeholder="Buscar por título ou banco" value="{{request.args.get('busca','')}}"></form><div class="card"><table class="table mb-0"><thead><tr><th>Título</th><th>Banco</th><th>Consultas</th><th></th></tr></thead><tbody>{% for i in itens %}<tr><td>{{i.titulo}}</td><td>{{i.tipo_banco}}</td><td>{{i.consultas|length}}</td><td><a class="btn btn-sm btn-outline-primary" href="{{url_for('scripts_ver',id=i.id)}}">Abrir</a></td></tr>{% endfor %}</tbody></table></div>{% endblock %}
+{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between">
+    <h3>Scripts SQL</h3>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('scripts_novo')}}">Novo Script</a>{%
+    endif %}
+</div>
+<form class="my-3"><input class="form-control" name="busca" placeholder="Buscar por título ou banco"
+        value="{{request.args.get('busca','')}}"></form>
+<div class="card">
+    <table class="table mb-0">
+        <thead>
+            <tr>
+                <th>Título</th>
+                <th>Banco</th>
+                <th>Consultas</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>{% for i in itens %}<tr>
+                <td>{{i.titulo}}</td>
+                <td>{{i.tipo_banco}}</td>
+                <td>{{i.consultas|length}}</td>
+                <td><a class="btn btn-sm btn-outline-primary" href="{{url_for('scripts_ver',id=i.id)}}">Abrir</a></td>
+            </tr>{% endfor %}</tbody>
+    </table>
+</div>{% endblock %}

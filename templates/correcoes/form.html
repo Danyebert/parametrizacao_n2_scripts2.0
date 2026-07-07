@@ -1,1 +1,29 @@
-{% extends 'base.html' %}{% block content %}<h3>{{'Editar' if item else 'Nova'}} Correção N2</h3><form method="post" enctype="multipart/form-data" class="card p-3"><div class="row g-3"><div class="col-md-6"><label>Título</label><input class="form-control" name="titulo" value="{{item.titulo if item else ''}}" required></div><div class="col-md-3"><label>Sistema</label><input class="form-control" name="sistema" value="{{item.sistema if item else ''}}"></div><div class="col-md-3"><label>Categoria</label><input class="form-control" name="categoria" value="{{item.categoria if item else ''}}"></div><div class="col-md-3"><label>Criticidade</label><select class="form-select" name="criticidade">{% for c in ['Baixa','Média','Alta'] %}<option {{'selected' if item and item.criticidade==c}}>{{c}}</option>{% endfor %}</select></div><div class="col-12"><label>Erro apresentado</label><textarea class="codemirror-sql" name="erro">{{item.erro if item else ''}}</textarea></div><div class="col-12"><label>Causa provável</label><textarea class="form-control" name="causa" rows="4">{{item.causa if item else ''}}</textarea></div><div class="col-12"><label>Correção aplicada</label><textarea class="codemirror-sql" name="correcao">{{item.correcao if item else ''}}</textarea></div><div class="col-12"><label>Anexos JPG/PNG</label><input class="form-control" type="file" name="anexos" multiple accept="image/png,image/jpeg"></div></div>{% if item %}<hr><div class="row g-3">{% for a in item.anexos if not a.deleted_at %}<div class="col-md-3"><img class="img-fluid thumb" src="{{url_for('anexo_ver',id=a.id)}}"><form method="post" action="{{url_for('anexo_excluir',id=a.id)}}"><button class="btn btn-sm btn-outline-danger mt-1">Remover</button></form></div>{% endfor %}</div>{% endif %}<div class="mt-3"><button class="btn btn-primary">Salvar</button><a class="btn btn-secondary" href="{{url_for('correcoes_listar')}}">Voltar</a></div></form>{% endblock %}
+{% extends 'base.html' %}{% block content %}<h3>{{'Editar' if item else 'Nova'}} Correção N2</h3>
+<form method="post" enctype="multipart/form-data" class="card p-3">
+    <div class="row g-3">
+        <div class="col-md-6"><label>Título</label><input class="form-control" name="titulo"
+                value="{{item.titulo if item else ''}}" required></div>
+        <div class="col-md-3"><label>Sistema</label><input class="form-control" name="sistema"
+                value="{{item.sistema if item else ''}}"></div>
+        <div class="col-md-3"><label>Categoria</label><input class="form-control" name="categoria"
+                value="{{item.categoria if item else ''}}"></div>
+        <div class="col-md-3"><label>Criticidade</label><select class="form-select" name="criticidade">{% for c in
+                ['Baixa','Média','Alta'] %}<option {{'selected' if item and item.criticidade==c}}>{{c}}</option>{%
+                endfor %}</select></div>
+        <div class="col-12"><label>Erro apresentado</label><textarea class="codemirror-sql"
+                name="erro">{{item.erro if item else ''}}</textarea></div>
+        <div class="col-12"><label>Causa provável</label><textarea class="form-control" name="causa"
+                rows="4">{{item.causa if item else ''}}</textarea></div>
+        <div class="col-12"><label>Correção aplicada</label><textarea class="codemirror-sql"
+                name="correcao">{{item.correcao if item else ''}}</textarea></div>
+        <div class="col-12"><label>Anexos JPG/PNG</label><input class="form-control" type="file" name="anexos" multiple
+                accept="image/png,image/jpeg"></div>
+    </div>{% if item %}
+    <hr>
+    <div class="row g-3">{% for a in item.anexos if not a.deleted_at %}<div class="col-md-3"><img
+                class="img-fluid thumb" src="{{url_for('anexo_ver',id=a.id)}}">
+            <form method="post" action="{{url_for('anexo_excluir',id=a.id)}}"><button
+                    class="btn btn-sm btn-outline-danger mt-1">Remover</button></form>
+        </div>{% endfor %}</div>{% endif %}<div class="mt-3"><button class="btn btn-primary">Salvar</button><a
+            class="btn btn-secondary" href="{{url_for('correcoes_listar')}}">Voltar</a></div>
+</form>{% endblock %}

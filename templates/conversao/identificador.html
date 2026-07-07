@@ -1,1 +1,25 @@
-{% extends 'base.html' %}{% block content %}<h3>Gerador de Identificador</h3><div class="card p-3"><label>Cole a linha do cliente</label><textarea id="linha" class="form-control" rows="4" placeholder="05/26 - 72051 - SILVANIO DIREÇÕES HIDRAULICAS - ARAPIRACA"></textarea><button class="btn btn-primary mt-3" onclick="gerar()">Gerar</button><hr><div class="row"><div class="col-md-4"><label>Número</label><div class="input-group"><input id="numero" class="form-control" readonly><button class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(numero.value)">Copiar</button></div></div><div class="col-md-8"><label>Identificador</label><div class="input-group"><input id="identificador" class="form-control" readonly><button class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(identificador.value)">Copiar</button></div></div></div><hr><div class="d-flex gap-2 mb-2"><button class="btn btn-outline-success" onclick="exportarTxt()">Exportar histórico TXT</button><button class="btn btn-outline-danger" onclick="historico=[];renderHist()">Limpar histórico</button></div><ul id="hist" class="list-group"></ul></div><script>let historico=[];async function gerar(){const r=await fetch('/api/identificador',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({linha:linha.value})});const d=await r.json();numero.value=d.numero;identificador.value=d.identificador;historico.unshift(`${d.numero};${d.identificador}`);renderHist()}function renderHist(){hist.innerHTML=historico.map(x=>`<li class="list-group-item">${x}</li>`).join('')}function exportarTxt(){const blob=new Blob([historico.join('\n')],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='historico_identificadores.txt';a.click()}</script>{% endblock %}
+{% extends 'base.html' %}{% block content %}<h3>Gerador de Identificador</h3>
+<div class="card p-3"><label>Cole a linha do cliente</label><textarea id="linha" class="form-control" rows="4"
+        placeholder="05/26 - 72051 - SILVANIO DIREÇÕES HIDRAULICAS - ARAPIRACA"></textarea><button
+        class="btn btn-primary mt-3" onclick="gerar()">Gerar</button>
+    <hr>
+    <div class="row">
+        <div class="col-md-4"><label>Número</label>
+            <div class="input-group"><input id="numero" class="form-control" readonly><button
+                    class="btn btn-outline-secondary"
+                    onclick="navigator.clipboard.writeText(numero.value)">Copiar</button></div>
+        </div>
+        <div class="col-md-8"><label>Identificador</label>
+            <div class="input-group"><input id="identificador" class="form-control" readonly><button
+                    class="btn btn-outline-secondary"
+                    onclick="navigator.clipboard.writeText(identificador.value)">Copiar</button></div>
+        </div>
+    </div>
+    <hr>
+    <div class="d-flex gap-2 mb-2"><button class="btn btn-outline-success" onclick="exportarTxt()">Exportar histórico
+            TXT</button><button class="btn btn-outline-danger" onclick="historico=[];renderHist()">Limpar
+            histórico</button></div>
+    <ul id="hist" class="list-group"></ul>
+</div>
+<script>let historico = []; async function gerar() { const r = await fetch('/api/identificador', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ linha: linha.value }) }); const d = await r.json(); numero.value = d.numero; identificador.value = d.identificador; historico.unshift(`${d.numero};${d.identificador}`); renderHist() } function renderHist() { hist.innerHTML = historico.map(x => `<li class="list-group-item">${x}</li>`).join('') } function exportarTxt() { const blob = new Blob([historico.join('\n')], { type: 'text/plain' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'historico_identificadores.txt'; a.click() }</script>
+{% endblock %}
