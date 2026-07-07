@@ -282,13 +282,49 @@ def register_routes(app):
 
     def salvar_script(item=None):
         if request.method == "POST":
-            if item is None: item = ScriptSQL(); db.session.add(item); db.session.flush()
-            item.titulo=request.form.get("titulo"); item.tipo_banco=request.form.get("tipo_banco"); item.descricao=request.form.get("descricao"); item.observacoes=request.form.get("observacoes"); item.updated_at=datetime.utcnow()
+            titulo = (request.form.get("titulo") or "").strip()
+            tipo_banco = (request.form.get("tipo_banco") or request.form.get("tipo") or "").strip()
+            descricao = request.form.get("descricao") or ""
+            observacoes = request.form.get("observacoes") or ""
+
+            if not titulo:
+                flash("Informe o título do script.", "warning")
+                return render_template("scripts/form.html", item=item)
+
+            if not tipo_banco:
+                tipo_banco = "Não informado"
+
+            if item is None:
+                item = ScriptSQL()
+                db.session.add(item)
+
+            item.titulo = titulo
+            item.tipo_banco = tipo_banco
+            item.descricao = descricao
+            item.observacoes = observacoes
+            item.updated_at = datetime.utcnow()
+
+            db.session.flush()
+
             ConsultaSQL.query.filter_by(script_id=item.id).delete()
-            titulos = request.form.getlist("titulo_consulta[]"); codigos = request.form.getlist("codigo_sql[]")
+
+            titulos = request.form.getlist("titulo_consulta[]") or request.form.getlist("consulta_titulo[]")
+            codigos = request.form.getlist("codigo_sql[]") or request.form.getlist("consulta_sql[]")
+
             for i, (t, c) in enumerate(zip(titulos, codigos)):
-                if t.strip() or c.strip(): db.session.add(ConsultaSQL(script_id=item.id, titulo_consulta=t or f"Consulta {i+1}", codigo_sql=c, ordem=i))
-            db.session.commit(); flash("Script salvo.", "success"); return redirect(url_for("scripts_ver", id=item.id))
+                t = (t or "").strip()
+                c = (c or "").strip()
+                if t or c:
+                    db.session.add(ConsultaSQL(
+                        script_id=item.id,
+                        titulo_consulta=t or f"Consulta {i + 1}",
+                        codigo_sql=c,
+                        ordem=i
+                    ))
+
+            db.session.commit()
+            flash("Script salvo.", "success")
+            return redirect(url_for("scripts_ver", id=item.id))
         return render_template("scripts/form.html", item=item)
 
     @app.route("/scripts/<int:id>/excluir", methods=["POST"])
