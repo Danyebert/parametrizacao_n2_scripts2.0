@@ -1,0 +1,365 @@
+import os, io, json, zipfile, unicodedata, re
+from datetime import datetime
+from functools import wraps
+from pathlib import Path
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, abort, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import or_
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+
+load_dotenv()
+db = SQLAlchemy()
+
+ALLOWED_IMAGES = {"jpg", "jpeg", "png"}
+ARCHIVES = {".zip", ".rar", ".7z"}
+
+class TimestampMixin:
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    deleted_at = db.Column(db.DateTime)
+
+class Usuario(db.Model, TimestampMixin):
+    __tablename__ = "usuarios"
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), unique=True, nullable=False)
+    senha_hash = db.Column(db.String(255), nullable=False)
+
+class CorrecaoN2(db.Model, TimestampMixin):
+    __tablename__ = "correcoes_n2"
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(255), nullable=False)
+    sistema = db.Column(db.String(150))
+    categoria = db.Column(db.String(120))
+    criticidade = db.Column(db.String(20), default="Baixa")
+    erro = db.Column(db.Text)
+    causa = db.Column(db.Text)
+    correcao = db.Column(db.Text)
+    anexos = db.relationship("AnexoCorrecao", backref="correcao", lazy=True)
+
+class AnexoCorrecao(db.Model, TimestampMixin):
+    __tablename__ = "anexos_correcoes"
+    id = db.Column(db.Integer, primary_key=True)
+    correcao_id = db.Column(db.Integer, db.ForeignKey("correcoes_n2.id"), nullable=False)
+    nome_arquivo = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(100), nullable=False)
+    conteudo = db.Column(db.LargeBinary, nullable=False)
+
+class ScriptSQL(db.Model, TimestampMixin):
+    __tablename__ = "scripts_sql"
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(255), nullable=False)
+    tipo_banco = db.Column(db.String(80), nullable=False)
+    descricao = db.Column(db.Text)
+    observacoes = db.Column(db.Text)
+    consultas = db.relationship("ConsultaSQL", backref="script", lazy=True, cascade="all, delete-orphan")
+
+class ConsultaSQL(db.Model, TimestampMixin):
+    __tablename__ = "consultas_sql"
+    id = db.Column(db.Integer, primary_key=True)
+    script_id = db.Column(db.Integer, db.ForeignKey("scripts_sql.id"), nullable=False)
+    titulo_consulta = db.Column(db.String(255), nullable=False)
+    codigo_sql = db.Column(db.Text, nullable=False)
+    ordem = db.Column(db.Integer, default=0)
+
+class BancoMapeado(db.Model, TimestampMixin):
+    __tablename__ = "bancos_mapeados"
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(180), nullable=False)
+    tipo_banco = db.Column(db.String(80))
+    descricao = db.Column(db.Text)
+    observacoes = db.Column(db.Text)
+
+class ArquivoDownload(db.Model, TimestampMixin):
+    __tablename__ = "arquivos_download"
+    id = db.Column(db.Integer, primary_key=True)
+    modulo = db.Column(db.String(30), nullable=False)  # datasync ou conversao
+    nome = db.Column(db.String(255), nullable=False)
+    tipo = db.Column(db.String(30), nullable=False)
+    caminho = db.Column(db.String(500))
+    conteudo = db.Column(db.LargeBinary)
+    mime_type = db.Column(db.String(120))
+    downloads = db.Column(db.Integer, default=0)
+
+
+def create_app():
+    app = Flask(__name__, template_folder="templates", static_folder="static")
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
+    db_url = os.getenv("DATABASE_URL", "sqlite:///local.db")
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+    elif db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
+    db.init_app(app)
+
+    with app.app_context():
+        db.create_all()
+        create_default_admin()
+
+    register_routes(app)
+    return app
+
+
+def create_default_admin():
+    nome = os.getenv("ADMIN_DEFAULT_USER", "admin")
+    senha = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
+    if not Usuario.query.filter_by(nome=nome, deleted_at=None).first():
+        db.session.add(Usuario(nome=nome, senha_hash=generate_password_hash(senha)))
+        db.session.commit()
+
+
+def is_admin():
+    return bool(session.get("usuario_id"))
+
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not is_admin():
+            flash("Faça login administrativo para executar esta ação.", "warning")
+            return redirect(url_for("login"))
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def allowed_image(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGES
+
+
+def normalize_identificador(texto):
+    texto = unicodedata.normalize("NFD", texto).encode("ascii", "ignore").decode("utf-8")
+    texto = re.sub(r"[^a-zA-Z0-9]", "", texto)
+    return texto.lower()
+
+
+def get_file_listing(modulo):
+    base = Path("local_files") / modulo
+    rows = []
+    if base.exists():
+        for item in sorted(base.iterdir(), key=lambda p: p.name.lower()):
+            rows.append({"origem": "pasta", "id": None, "nome": item.name, "tipo": "pasta" if item.is_dir() else "arquivo", "caminho": str(item)})
+    for arq in ArquivoDownload.query.filter_by(modulo=modulo, deleted_at=None).order_by(ArquivoDownload.nome).all():
+        rows.append({"origem": "banco", "id": arq.id, "nome": arq.nome, "tipo": arq.tipo, "caminho": arq.caminho or "Banco de dados", "downloads": arq.downloads})
+    return rows
+
+
+def register_routes(app):
+    @app.context_processor
+    def inject_globals():
+        return {"is_admin": is_admin()}
+
+    @app.route("/")
+    def dashboard():
+        return render_template("dashboard.html",
+            correcoes=CorrecaoN2.query.filter_by(deleted_at=None).count(),
+            scripts=ScriptSQL.query.filter_by(deleted_at=None).count(),
+            bancos=BancoMapeado.query.filter_by(deleted_at=None).count(),
+            downloads=ArquivoDownload.query.filter_by(deleted_at=None).count())
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if request.method == "POST":
+            user = Usuario.query.filter_by(nome=request.form.get("nome"), deleted_at=None).first()
+            if user and check_password_hash(user.senha_hash, request.form.get("senha", "")):
+                session["usuario_id"] = user.id; session["usuario_nome"] = user.nome
+                flash("Login realizado com sucesso.", "success")
+                return redirect(url_for("dashboard"))
+            flash("Usuário ou senha inválidos.", "danger")
+        return render_template("auth/login.html")
+
+    @app.route("/logout")
+    def logout():
+        session.clear(); flash("Sessão encerrada.", "info")
+        return redirect(url_for("dashboard"))
+
+    @app.route("/alterar-senha", methods=["GET", "POST"])
+    @admin_required
+    def alterar_senha():
+        user = Usuario.query.get_or_404(session["usuario_id"])
+        if request.method == "POST":
+            if not check_password_hash(user.senha_hash, request.form.get("senha_atual", "")):
+                flash("Senha atual inválida.", "danger")
+            elif request.form.get("nova_senha") != request.form.get("confirmar_senha"):
+                flash("Confirmação de senha não confere.", "danger")
+            else:
+                user.senha_hash = generate_password_hash(request.form.get("nova_senha")); db.session.commit()
+                flash("Senha alterada com sucesso.", "success")
+                return redirect(url_for("dashboard"))
+        return render_template("auth/alterar_senha.html")
+
+    @app.route("/correcoes")
+    def correcoes_listar():
+        q = CorrecaoN2.query.filter_by(deleted_at=None)
+        busca = request.args.get("busca", "").strip(); categoria = request.args.get("categoria", ""); criticidade = request.args.get("criticidade", "")
+        if busca: q = q.filter(or_(CorrecaoN2.titulo.ilike(f"%{busca}%"), CorrecaoN2.sistema.ilike(f"%{busca}%"), CorrecaoN2.erro.ilike(f"%{busca}%")))
+        if categoria: q = q.filter(CorrecaoN2.categoria == categoria)
+        if criticidade: q = q.filter(CorrecaoN2.criticidade == criticidade)
+        categorias = [r[0] for r in db.session.query(CorrecaoN2.categoria).filter(CorrecaoN2.deleted_at==None, CorrecaoN2.categoria!=None).distinct()]
+        return render_template("correcoes/list.html", itens=q.order_by(CorrecaoN2.updated_at.desc()).all(), categorias=categorias)
+
+    @app.route("/correcoes/novo", methods=["GET", "POST"])
+    @admin_required
+    def correcoes_novo():
+        return salvar_correcao()
+
+    @app.route("/correcoes/<int:id>")
+    def correcoes_ver(id):
+        item = CorrecaoN2.query.filter_by(id=id, deleted_at=None).first_or_404()
+        return render_template("correcoes/view.html", item=item)
+
+    @app.route("/correcoes/<int:id>/editar", methods=["GET", "POST"])
+    @admin_required
+    def correcoes_editar(id):
+        return salvar_correcao(CorrecaoN2.query.filter_by(id=id, deleted_at=None).first_or_404())
+
+    def salvar_correcao(item=None):
+        if request.method == "POST":
+            if item is None: item = CorrecaoN2(); db.session.add(item)
+            for campo in ["titulo", "sistema", "categoria", "criticidade", "erro", "causa", "correcao"]:
+                setattr(item, campo, request.form.get(campo))
+            item.updated_at = datetime.utcnow(); db.session.flush()
+            for f in request.files.getlist("anexos"):
+                if f and f.filename and allowed_image(f.filename):
+                    db.session.add(AnexoCorrecao(correcao_id=item.id, nome_arquivo=secure_filename(f.filename), mime_type=f.mimetype, conteudo=f.read()))
+            db.session.commit(); flash("Correção salva com sucesso.", "success")
+            return redirect(url_for("correcoes_ver", id=item.id))
+        return render_template("correcoes/form.html", item=item)
+
+    @app.route("/correcoes/<int:id>/excluir", methods=["POST"])
+    @admin_required
+    def correcoes_excluir(id):
+        item = CorrecaoN2.query.get_or_404(id); item.deleted_at = datetime.utcnow(); db.session.commit(); flash("Correção removida.", "success"); return redirect(url_for("correcoes_listar"))
+
+    @app.route("/anexos/<int:id>")
+    def anexo_ver(id):
+        anexo = AnexoCorrecao.query.filter_by(id=id, deleted_at=None).first_or_404()
+        return send_file(io.BytesIO(anexo.conteudo), mimetype=anexo.mime_type, download_name=anexo.nome_arquivo)
+
+    @app.route("/anexos/<int:id>/excluir", methods=["POST"])
+    @admin_required
+    def anexo_excluir(id):
+        anexo = AnexoCorrecao.query.get_or_404(id); anexo.deleted_at = datetime.utcnow(); db.session.commit(); flash("Anexo removido.", "success"); return redirect(url_for("correcoes_editar", id=anexo.correcao_id))
+
+    @app.route("/correcoes/exportar")
+    @admin_required
+    def correcoes_exportar():
+        dados = [{k:getattr(c,k) for k in ["titulo","sistema","erro","causa","correcao","categoria","criticidade"]} | {"created_at": c.created_at.isoformat(), "updated_at": c.updated_at.isoformat()} for c in CorrecaoN2.query.filter_by(deleted_at=None).all()]
+        return send_file(io.BytesIO(json.dumps(dados, ensure_ascii=False, indent=2).encode()), mimetype="application/json", as_attachment=True, download_name="correcoes_n2.json")
+
+    @app.route("/correcoes/importar", methods=["POST"])
+    @admin_required
+    def correcoes_importar():
+        data = json.load(request.files["arquivo"])
+        for row in data:
+            if "rotinaNome" in row:
+                item = CorrecaoN2(titulo=row.get("rotinaNome") or "Sem título", sistema=row.get("versao") or "", erro=row.get("comentario") or "", causa="Não informado", correcao=row.get("solucao") or "", categoria="Rotina", criticidade="Baixa")
+            else:
+                item = CorrecaoN2(titulo=row.get("titulo") or "Sem título", sistema=row.get("sistema"), erro=row.get("erro"), causa=row.get("causa"), correcao=row.get("correcao"), categoria=row.get("categoria"), criticidade=row.get("criticidade") or "Baixa")
+            db.session.add(item)
+        db.session.commit(); flash("Importação concluída.", "success"); return redirect(url_for("correcoes_listar"))
+
+    @app.route("/scripts")
+    def scripts_listar():
+        busca = request.args.get("busca", "")
+        q = ScriptSQL.query.filter_by(deleted_at=None)
+        if busca: q = q.filter(or_(ScriptSQL.titulo.ilike(f"%{busca}%"), ScriptSQL.tipo_banco.ilike(f"%{busca}%")))
+        return render_template("scripts/list.html", itens=q.order_by(ScriptSQL.updated_at.desc()).all())
+
+    @app.route("/scripts/novo", methods=["GET", "POST"])
+    @admin_required
+    def scripts_novo(): return salvar_script()
+
+    @app.route("/scripts/<int:id>")
+    def scripts_ver(id): return render_template("scripts/view.html", item=ScriptSQL.query.filter_by(id=id, deleted_at=None).first_or_404())
+
+    @app.route("/scripts/<int:id>/editar", methods=["GET", "POST"])
+    @admin_required
+    def scripts_editar(id): return salvar_script(ScriptSQL.query.filter_by(id=id, deleted_at=None).first_or_404())
+
+    def salvar_script(item=None):
+        if request.method == "POST":
+            if item is None: item = ScriptSQL(); db.session.add(item); db.session.flush()
+            item.titulo=request.form.get("titulo"); item.tipo_banco=request.form.get("tipo_banco"); item.descricao=request.form.get("descricao"); item.observacoes=request.form.get("observacoes"); item.updated_at=datetime.utcnow()
+            ConsultaSQL.query.filter_by(script_id=item.id).delete()
+            titulos = request.form.getlist("titulo_consulta[]"); codigos = request.form.getlist("codigo_sql[]")
+            for i, (t, c) in enumerate(zip(titulos, codigos)):
+                if t.strip() or c.strip(): db.session.add(ConsultaSQL(script_id=item.id, titulo_consulta=t or f"Consulta {i+1}", codigo_sql=c, ordem=i))
+            db.session.commit(); flash("Script salvo.", "success"); return redirect(url_for("scripts_ver", id=item.id))
+        return render_template("scripts/form.html", item=item)
+
+    @app.route("/scripts/<int:id>/excluir", methods=["POST"])
+    @admin_required
+    def scripts_excluir(id):
+        item=ScriptSQL.query.get_or_404(id); item.deleted_at=datetime.utcnow(); db.session.commit(); flash("Script removido.", "success"); return redirect(url_for("scripts_listar"))
+
+    @app.route("/bancos")
+    def bancos_listar():
+        return render_template("bancos/list.html", itens=BancoMapeado.query.filter_by(deleted_at=None).order_by(BancoMapeado.nome).all())
+
+    @app.route("/bancos/novo", methods=["GET","POST"])
+    @app.route("/bancos/<int:id>/editar", methods=["GET","POST"])
+    @admin_required
+    def banco_form(id=None):
+        item = BancoMapeado.query.get(id) if id else BancoMapeado()
+        if request.method == "POST":
+            if not id: db.session.add(item)
+            item.nome=request.form.get("nome"); item.tipo_banco=request.form.get("tipo_banco"); item.descricao=request.form.get("descricao"); item.observacoes=request.form.get("observacoes"); item.updated_at=datetime.utcnow(); db.session.commit(); flash("Banco salvo.","success"); return redirect(url_for("bancos_listar"))
+        return render_template("bancos/form.html", item=item)
+
+    @app.route("/bancos/<int:id>/excluir", methods=["POST"])
+    @admin_required
+    def banco_excluir(id):
+        item=BancoMapeado.query.get_or_404(id); item.deleted_at=datetime.utcnow(); db.session.commit(); return redirect(url_for("bancos_listar"))
+
+    @app.route("/datasync")
+    def datasync(): return render_template("datasync/list.html", titulo="DataSync", modulo="datasync", itens=get_file_listing("datasync"))
+
+    @app.route("/conversao")
+    def conversao(): return render_template("datasync/list.html", titulo="Ferramentas de Conversão de Dados", modulo="conversao", itens=get_file_listing("conversao"))
+
+    @app.route("/arquivos/<modulo>/upload", methods=["POST"])
+    @admin_required
+    def arquivo_upload(modulo):
+        for f in request.files.getlist("arquivos"):
+            if f and f.filename:
+                nome=secure_filename(f.filename); db.session.add(ArquivoDownload(modulo=modulo, nome=nome, tipo="arquivo", caminho="Banco de dados", mime_type=f.mimetype or "application/octet-stream", conteudo=f.read()))
+        db.session.commit(); flash("Arquivo(s) enviado(s) para o banco.", "success"); return redirect(url_for("datasync" if modulo=="datasync" else "conversao"))
+
+    @app.route("/arquivos/<modulo>/download")
+    def arquivo_download_local(modulo):
+        path = Path(request.args.get("path", ""))
+        base = (Path("local_files") / modulo).resolve()
+        target = path.resolve()
+        if not str(target).startswith(str(base)) or not target.exists(): abort(404)
+        if target.is_file(): return send_file(target, as_attachment=True)
+        children = [p for p in target.iterdir() if p.is_file()]
+        archives = [p for p in children if p.suffix.lower() in ARCHIVES]
+        if len(children) == 1 and archives: return send_file(archives[0], as_attachment=True)
+        mem=io.BytesIO()
+        with zipfile.ZipFile(mem,"w",zipfile.ZIP_DEFLATED) as z:
+            for p in target.rglob("*"):
+                if p.is_file(): z.write(p, p.relative_to(target))
+        mem.seek(0); return send_file(mem, as_attachment=True, download_name=f"{target.name}.zip", mimetype="application/zip")
+
+    @app.route("/arquivos/db/<int:id>/download")
+    def arquivo_download_db(id):
+        arq=ArquivoDownload.query.filter_by(id=id, deleted_at=None).first_or_404(); arq.downloads=(arq.downloads or 0)+1; db.session.commit()
+        return send_file(io.BytesIO(arq.conteudo), mimetype=arq.mime_type, as_attachment=True, download_name=arq.nome)
+
+    @app.route("/gerador-identificador")
+    def gerador(): return render_template("conversao/identificador.html")
+
+    @app.route("/api/identificador", methods=["POST"])
+    def api_identificador():
+        linha = request.json.get("linha", "")
+        partes = [p.strip() for p in linha.split("-")]
+        numero = next((p for p in partes if p.isdigit()), "")
+        nome_cidade = "".join(partes[2:]) if len(partes) >= 3 else linha
+        return jsonify({"numero": numero, "identificador": normalize_identificador(nome_cidade)})
+
+if __name__ == "__main__":
+    create_app().run(debug=True)
