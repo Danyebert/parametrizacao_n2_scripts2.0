@@ -1,24 +1,129 @@
-{% extends 'base.html' %}{% block content %}<h3>Dashboard</h3>
-<p class="text-muted">Central interna de documentação técnica para equipe N2.</p>
-<div class="row g-3">
-    <div class="col-md-3">
-        <div class="card p-3"><b>Correções N2</b>
-            <h2>{{correcoes}}</h2>
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="dashboard-page">
+  <div class="page-header mb-4">
+    <h3>Dashboard</h3>
+    <p>Central interna de documentação técnica para equipe N2.</p>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+      <div class="kpi-card kpi-blue">
+        <div class="kpi-icon"><i class="bi bi-tools"></i></div>
+        <div>
+          <span>Correções N2</span>
+          <h2>{{ correcoes }}</h2>
+          <p>Total de correções</p>
         </div>
+      </div>
     </div>
-    <div class="col-md-3">
-        <div class="card p-3"><b>Scripts SQL</b>
-            <h2>{{scripts}}</h2>
+
+    <div class="col-xl-3 col-md-6">
+      <div class="kpi-card kpi-purple">
+        <div class="kpi-icon"><i class="bi bi-code-slash"></i></div>
+        <div>
+          <span>Scripts SQL</span>
+          <h2>{{ scripts }}</h2>
+          <p>Total de scripts</p>
         </div>
+      </div>
     </div>
-    <div class="col-md-3">
-        <div class="card p-3"><b>Bancos mapeados</b>
-            <h2>{{bancos}}</h2>
+
+    <div class="col-xl-3 col-md-6">
+      <div class="kpi-card kpi-green">
+        <div class="kpi-icon"><i class="bi bi-database"></i></div>
+        <div>
+          <span>Bancos mapeados</span>
+          <h2>{{ bancos }}</h2>
+          <p>Total de bancos</p>
         </div>
+      </div>
     </div>
-    <div class="col-md-3">
-        <div class="card p-3"><b>Arquivos</b>
-            <h2>{{downloads}}</h2>
+
+    <div class="col-xl-3 col-md-6">
+      <div class="kpi-card kpi-orange">
+        <div class="kpi-icon"><i class="bi bi-cloud-download"></i></div>
+        <div>
+          <span>Arquivos</span>
+          <h2>{{ downloads }}</h2>
+          <p>Links disponíveis</p>
         </div>
+      </div>
     </div>
-</div>{% endblock %}
+  </div>
+
+  <div class="row g-3 mt-2">
+
+  <div class="col-xl-4">
+    <div class="panel-card h-100">
+      <div class="panel-header">
+        <h5>Atividades recentes</h5>
+
+        <form method="get">
+          <select name="dias" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="7" {% if dias == 7 %}selected{% endif %}>Últimos 7 dias</option>
+            <option value="15" {% if dias == 15 %}selected{% endif %}>Últimos 15 dias</option>
+            <option value="30" {% if dias == 30 %}selected{% endif %}>Últimos 30 dias</option>
+          </select>
+        </form>
+      </div>
+
+      <div class="fake-chart"></div>
+
+      <div class="chart-numbers">
+        <span>Correções: <strong>{{ correcoes }}</strong></span>
+        <span>Scripts: <strong>{{ scripts }}</strong></span>
+        <span>Downloads: <strong>{{ arquivos_mais_baixados|sum(attribute='downloads') }}</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="panel-card h-100">
+      <div class="panel-header">
+        <h5>Últimas correções N2</h5>
+        <a href="{{ url_for('correcoes_listar') }}">Ver todas</a>
+      </div>
+
+      <div class="activity-list">
+        {% for c in ultimas_correcoes %}
+        <div>
+          <span class="dot red"></span>
+          <a href="{{ url_for('correcoes_ver', id=c.id) }}" class="table-link">
+            {{ c.titulo }}
+          </a>
+          <b>{{ c.criticidade or 'Baixa' }}</b>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">Nenhuma correção cadastrada.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="panel-card h-100">
+      <div class="panel-header">
+        <h5>Últimos scripts SQL</h5>
+        <a href="{{ url_for('scripts_listar') }}">Ver todos</a>
+      </div>
+
+      <div class="activity-list">
+        {% for s in ultimos_scripts %}
+        <div>
+          <span class="dot blue"></span>
+          <a href="{{ url_for('scripts_ver', id=s.id) }}" class="table-link">
+            {{ s.titulo }}
+          </a>
+          <b>{{ s.tipo_banco }}</b>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">Nenhum script cadastrado.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

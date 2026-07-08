@@ -148,17 +148,37 @@ def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.3.0",
+                "APP_VERSION": "2.3.1",
                 "APP_BUILD": "2026-07-08",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
     @app.route("/")
     def dashboard():
-        return render_template("dashboard.html",
+        dias = int(request.args.get("dias", 7))
+
+        ultimas_correcoes = CorrecaoN2.query.filter_by(
+            deleted_at=None
+        ).order_by(CorrecaoN2.updated_at.desc()).limit(5).all()
+
+        ultimos_scripts = ScriptSQL.query.filter_by(
+            deleted_at=None
+        ).order_by(ScriptSQL.updated_at.desc()).limit(5).all()
+
+        arquivos_mais_baixados = ArquivoDownload.query.filter_by(
+            deleted_at=None
+        ).order_by(ArquivoDownload.downloads.desc()).limit(5).all()
+
+        return render_template(
+            "dashboard.html",
             correcoes=CorrecaoN2.query.filter_by(deleted_at=None).count(),
             scripts=ScriptSQL.query.filter_by(deleted_at=None).count(),
             bancos=BancoMapeado.query.filter_by(deleted_at=None).count(),
-            downloads=ArquivoDownload.query.filter_by(deleted_at=None).count())
+            downloads=ArquivoDownload.query.filter_by(deleted_at=None).count(),
+            dias=dias,
+            ultimas_correcoes=ultimas_correcoes,
+            ultimos_scripts=ultimos_scripts,
+            arquivos_mais_baixados=arquivos_mais_baixados
+        )
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
