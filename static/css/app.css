@@ -277,3 +277,29 @@ body {
     color: var(--bs-primary);
     text-decoration: underline;
 }
+
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    background: var(--bs-tertiary-bg);
+    border-bottom: 1px solid var(--bs-border-color);
+    padding: 12px 16px;
+    margin: -20px -20px 20px -20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.breadcrumb a {
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    display: none;
+}

@@ -55,3 +55,15 @@
 ### Banco de dados
 
 - Adicionado o campo:
+
+
+# Versão 2.3.0 (08/07/2026)
+
+## Navegação
+
+- Adicionado breadcrumb dinâmico em todas as telas.
+- Breadcrumb fixo no topo da aplicação.
+- Navegação clicável entre módulos.
+- Melhor organização da barra superior.
+- Melhor experiência de navegação entre telas.
+- Padronização da TopBar.
