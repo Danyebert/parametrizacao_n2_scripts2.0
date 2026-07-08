@@ -26,3 +26,11 @@
 - Ajustes de CSS
 - Ajustes de JavaScript
 - Melhor responsividade
+
+## Versão 2.1.1 (08/07/2026)
+
+### Correções
+
+- Corrigido comportamento da sidebar ao recolher.
+- Ajustado rodapé de versão para acompanhar o estado da sidebar.
+- Pequenos ajustes de layout e CSS.

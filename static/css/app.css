@@ -259,3 +259,9 @@ body {
         width: 100%;
     }
 }
+
+.sidebar.collapsed .sidebar-footer {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
