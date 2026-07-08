@@ -76,7 +76,8 @@ class ArquivoDownload(db.Model, TimestampMixin):
     id = db.Column(db.Integer, primary_key=True)
     modulo = db.Column(db.String(30), nullable=False)  # datasync ou conversao
     nome = db.Column(db.String(255), nullable=False)
-    tipo = db.Column(db.String(30), nullable=False)
+    tipo = db.Column(db.String(80), nullable=False)
+    link_download = db.Column(db.Text)
     caminho = db.Column(db.String(500))
     conteudo = db.Column(db.LargeBinary)
     mime_type = db.Column(db.String(120))
@@ -137,21 +138,17 @@ def normalize_identificador(texto):
 
 
 def get_file_listing(modulo):
-    base = Path("local_files") / modulo
-    rows = []
-    if base.exists():
-        for item in sorted(base.iterdir(), key=lambda p: p.name.lower()):
-            rows.append({"origem": "pasta", "id": None, "nome": item.name, "tipo": "pasta" if item.is_dir() else "arquivo", "caminho": str(item)})
-    for arq in ArquivoDownload.query.filter_by(modulo=modulo, deleted_at=None).order_by(ArquivoDownload.nome).all():
-        rows.append({"origem": "banco", "id": arq.id, "nome": arq.nome, "tipo": arq.tipo, "caminho": arq.caminho or "Banco de dados", "downloads": arq.downloads})
-    return rows
+    return ArquivoDownload.query.filter_by(
+        modulo=modulo,
+        deleted_at=None
+    ).order_by(ArquivoDownload.nome).all()
 
 
 def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.1.1",
+                "APP_VERSION": "2.2.0",
                 "APP_BUILD": "2026-07-08",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
@@ -355,39 +352,123 @@ def register_routes(app):
         item=BancoMapeado.query.get_or_404(id); item.deleted_at=datetime.utcnow(); db.session.commit(); return redirect(url_for("bancos_listar"))
 
     @app.route("/datasync")
-    def datasync(): return render_template("datasync/list.html", titulo="DataSync", modulo="datasync", itens=get_file_listing("datasync"))
+    def datasync():
+        return render_template(
+            "datasync/list.html",
+            titulo="DataSync",
+            modulo="datasync",
+            itens=get_file_listing("datasync")
+        )
 
     @app.route("/conversao")
-    def conversao(): return render_template("datasync/list.html", titulo="Ferramentas de Conversão de Dados", modulo="conversao", itens=get_file_listing("conversao"))
+    def conversao():
+        return render_template(
+            "datasync/list.html",
+            titulo="Ferramentas de Conversão de Dados",
+            modulo="conversao",
+            itens=get_file_listing("conversao")
+        )
 
-    @app.route("/arquivos/<modulo>/upload", methods=["POST"])
+    def _modulo_redirect(modulo):
+        return "datasync" if modulo == "datasync" else "conversao"
+
+    def _modulo_titulo(modulo):
+        return "DataSync" if modulo == "datasync" else "Ferramentas de Conversão de Dados"
+
+    @app.route("/arquivos/<modulo>/novo", methods=["GET", "POST"])
     @admin_required
-    def arquivo_upload(modulo):
-        for f in request.files.getlist("arquivos"):
-            if f and f.filename:
-                nome=secure_filename(f.filename); db.session.add(ArquivoDownload(modulo=modulo, nome=nome, tipo="arquivo", caminho="Banco de dados", mime_type=f.mimetype or "application/octet-stream", conteudo=f.read()))
-        db.session.commit(); flash("Arquivo(s) enviado(s) para o banco.", "success"); return redirect(url_for("datasync" if modulo=="datasync" else "conversao"))
+    def arquivo_novo(modulo):
+        if modulo not in ["datasync", "conversao"]:
+            abort(404)
 
-    @app.route("/arquivos/<modulo>/download")
-    def arquivo_download_local(modulo):
-        path = Path(request.args.get("path", ""))
-        base = (Path("local_files") / modulo).resolve()
-        target = path.resolve()
-        if not str(target).startswith(str(base)) or not target.exists(): abort(404)
-        if target.is_file(): return send_file(target, as_attachment=True)
-        children = [p for p in target.iterdir() if p.is_file()]
-        archives = [p for p in children if p.suffix.lower() in ARCHIVES]
-        if len(children) == 1 and archives: return send_file(archives[0], as_attachment=True)
-        mem=io.BytesIO()
-        with zipfile.ZipFile(mem,"w",zipfile.ZIP_DEFLATED) as z:
-            for p in target.rglob("*"):
-                if p.is_file(): z.write(p, p.relative_to(target))
-        mem.seek(0); return send_file(mem, as_attachment=True, download_name=f"{target.name}.zip", mimetype="application/zip")
+        if request.method == "POST":
+            nome = (request.form.get("nome") or "").strip()
+            tipo = (request.form.get("tipo") or "").strip()
+            link_download = (request.form.get("link_download") or "").strip()
 
-    @app.route("/arquivos/db/<int:id>/download")
-    def arquivo_download_db(id):
-        arq=ArquivoDownload.query.filter_by(id=id, deleted_at=None).first_or_404(); arq.downloads=(arq.downloads or 0)+1; db.session.commit()
-        return send_file(io.BytesIO(arq.conteudo), mimetype=arq.mime_type, as_attachment=True, download_name=arq.nome)
+            if not nome or not tipo or not link_download:
+                flash("Preencha nome, tipo e link para download.", "warning")
+                return render_template("datasync/form.html", item=None, modulo=modulo, titulo=_modulo_titulo(modulo))
+
+            item = ArquivoDownload(
+                modulo=modulo,
+                nome=nome,
+                tipo=tipo,
+                link_download=link_download,
+                downloads=0
+            )
+            db.session.add(item)
+            db.session.commit()
+            flash("Link cadastrado com sucesso.", "success")
+            return redirect(url_for(_modulo_redirect(modulo)))
+
+        return render_template("datasync/form.html", item=None, modulo=modulo, titulo=_modulo_titulo(modulo))
+
+    @app.route("/arquivos/<modulo>/<int:id>/editar", methods=["GET", "POST"])
+    @admin_required
+    def arquivo_editar(modulo, id):
+        if modulo not in ["datasync", "conversao"]:
+            abort(404)
+
+        item = ArquivoDownload.query.filter_by(
+            id=id,
+            modulo=modulo,
+            deleted_at=None
+        ).first_or_404()
+
+        if request.method == "POST":
+            nome = (request.form.get("nome") or "").strip()
+            tipo = (request.form.get("tipo") or "").strip()
+            link_download = (request.form.get("link_download") or "").strip()
+
+            if not nome or not tipo or not link_download:
+                flash("Preencha nome, tipo e link para download.", "warning")
+                return render_template("datasync/form.html", item=item, modulo=modulo, titulo=_modulo_titulo(modulo))
+
+            item.nome = nome
+            item.tipo = tipo
+            item.link_download = link_download
+            item.updated_at = datetime.utcnow()
+            db.session.commit()
+            flash("Link atualizado com sucesso.", "success")
+            return redirect(url_for(_modulo_redirect(modulo)))
+
+        return render_template("datasync/form.html", item=item, modulo=modulo, titulo=_modulo_titulo(modulo))
+
+    @app.route("/arquivos/<modulo>/<int:id>/excluir", methods=["POST"])
+    @admin_required
+    def arquivo_excluir(modulo, id):
+        if modulo not in ["datasync", "conversao"]:
+            abort(404)
+
+        item = ArquivoDownload.query.filter_by(
+            id=id,
+            modulo=modulo,
+            deleted_at=None
+        ).first_or_404()
+        item.deleted_at = datetime.utcnow()
+        db.session.commit()
+        flash("Link removido com sucesso.", "success")
+        return redirect(url_for(_modulo_redirect(modulo)))
+
+    @app.route("/arquivos/<modulo>/<int:id>/download")
+    def arquivo_download_link(modulo, id):
+        if modulo not in ["datasync", "conversao"]:
+            abort(404)
+
+        item = ArquivoDownload.query.filter_by(
+            id=id,
+            modulo=modulo,
+            deleted_at=None
+        ).first_or_404()
+        item.downloads = (item.downloads or 0) + 1
+        db.session.commit()
+
+        if not item.link_download:
+            flash("Este item não possui link de download cadastrado.", "warning")
+            return redirect(url_for(_modulo_redirect(modulo)))
+
+        return redirect(item.link_download)
 
     @app.route("/gerador-identificador")
     def gerador(): return render_template("conversao/identificador.html")

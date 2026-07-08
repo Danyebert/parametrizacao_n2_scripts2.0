@@ -34,3 +34,24 @@
 - Ajustado rodapé de versão.
 - Adicionada navegação pelo título nas telas de Scripts SQL e Correções N2.
 - Pequenos ajustes de interface.
+
+
+# Versão 2.2.0 (08/07/2026)
+
+## 🚀 Novo módulo DataSync
+
+### Alterações
+
+- Removido o upload de arquivos para o banco de dados.
+- Implementado cadastro de links para download.
+- Adequado o módulo para funcionamento na Vercel.
+- Eliminada a limitação de upload (Erro HTTP 413).
+- Adicionado formulário para cadastro de ferramentas.
+- Adicionado contador de downloads.
+- Download agora é realizado diretamente pelo link informado.
+- Melhorias na interface do módulo DataSync.
+- Código simplificado para facilitar futuras manutenções.
+
+### Banco de dados
+
+- Adicionado o campo:

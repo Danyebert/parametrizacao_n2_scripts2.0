@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h3>{{ 'Editar' if item else 'Novo' }} Link - {{ titulo }}</h3>
+
+<form method="post" class="card p-3">
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <label class="form-label">Nome da Ferramenta</label>
+            <input type="text" name="nome" class="form-control" value="{{ item.nome if item else '' }}" required>
+        </div>
+
+        <div class="col-lg-6">
+            <label class="form-label">Tipo</label>
+            {% set tipo_atual = item.tipo if item else '' %}
+            <select name="tipo" class="form-select" required>
+                <option value="">Selecione...</option>
+                <option value="Instalador" {% if tipo_atual == 'Instalador' %}selected{% endif %}>Instalador</option>
+                <option value="Atualizador" {% if tipo_atual == 'Atualizador' %}selected{% endif %}>Atualizador</option>
+                <option value="Utilitário" {% if tipo_atual == 'Utilitário' %}selected{% endif %}>Utilitário</option>
+                <option value="Conversor" {% if tipo_atual == 'Conversor' %}selected{% endif %}>Conversor</option>
+                <option value="Pacote ZIP" {% if tipo_atual == 'Pacote ZIP' %}selected{% endif %}>Pacote ZIP</option>
+                <option value="Outro" {% if tipo_atual == 'Outro' %}selected{% endif %}>Outro</option>
+            </select>
+        </div>
+
+        <div class="col-12">
+            <label class="form-label">Link para download</label>
+            <input type="url" name="link_download" class="form-control" value="{{ item.link_download if item else '' }}" placeholder="https://..." required>
+        </div>
+    </div>
+
+    <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary">
+            <i class="bi bi-save"></i> Salvar
+        </button>
+
+        <a href="{{ url_for('datasync' if modulo == 'datasync' else 'conversao') }}" class="btn btn-secondary">
+            Voltar
+        </a>
+    </div>
+</form>
+{% endblock %}

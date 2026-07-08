@@ -1,30 +1,74 @@
-{% extends 'base.html' %}{% block content %}<h3>{{titulo}}</h3>
-<p class="text-muted">Lista automática de arquivos/pastas locais e arquivos enviados para o banco.</p>{% if is_admin %}
-<form class="card p-3 mb-3" action="{{url_for('arquivo_upload',modulo=modulo)}}" method="post"
-    enctype="multipart/form-data"><label>Subir arquivos para o banco de dados</label>
-    <div class="d-flex gap-2"><input class="form-control" type="file" name="arquivos" multiple><button
-            class="btn btn-primary">Enviar</button></div>
-</form>{% endif %}<div class="card">
-    <table class="table table-hover mb-0">
-        <thead>
-            <tr>
-                <th>Nome</th>
-                <th>Tipo</th>
-                <th>Caminho</th>
-                <th>Downloads</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>{% for i in itens %}<tr>
-                <td>{{i.nome}}</td>
-                <td>{{i.tipo}}</td>
-                <td>{{i.caminho}}</td>
-                <td>{{i.downloads or 0}}</td>
-                <td>{% if i.origem=='banco' %}<a class="btn btn-sm btn-outline-primary"
-                        href="{{url_for('arquivo_download_db',id=i.id)}}">Baixar</a>{% else %}<a
-                        class="btn btn-sm btn-outline-primary"
-                        href="{{url_for('arquivo_download_local',modulo=modulo,path=i.caminho)}}">Baixar</a>{% endif %}
-                </td>
-            </tr>{% endfor %}</tbody>
-    </table>
-</div>{% endblock %}
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="mb-1">{{ titulo }}</h3>
+        <p class="text-muted mb-0">Cadastro de links para download. Os arquivos ficam fora da Vercel para evitar erro 413.</p>
+    </div>
+
+    {% if is_admin %}
+    <a href="{{ url_for('arquivo_novo', modulo=modulo) }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Novo Link
+    </a>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Nome da Ferramenta</th>
+                    <th>Tipo</th>
+                    <th>Contador</th>
+                    <th>Link para download</th>
+                    <th class="text-end">Ações</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for item in itens %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" class="table-link" target="_blank">
+                            {{ item.nome }}
+                        </a>
+                    </td>
+                    <td>{{ item.tipo }}</td>
+                    <td>{{ item.downloads or 0 }}</td>
+                    <td>
+                        <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" class="text-decoration-none" target="_blank">
+                            Abrir download
+                        </a>
+                    </td>
+                    <td class="text-end">
+                        <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" class="btn btn-outline-primary btn-sm" target="_blank">
+                            <i class="bi bi-download"></i> Baixar
+                        </a>
+
+                        {% if is_admin %}
+                        <a href="{{ url_for('arquivo_editar', modulo=modulo, id=item.id) }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+
+                        <form method="post" action="{{ url_for('arquivo_excluir', modulo=modulo, id=item.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Deseja excluir este link?')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-4">
+                        Nenhum link cadastrado.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
