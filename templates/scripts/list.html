@@ -1,28 +1,291 @@
-{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between">
-    <h3>Scripts SQL</h3>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('scripts_novo')}}">Novo Script</a>{%
-    endif %}
-</div>
-<form class="my-3"><input class="form-control" name="busca" placeholder="Buscar por título ou banco"
-        value="{{request.args.get('busca','')}}"></form>
-<div class="card">
-    <table class="table mb-0">
-        <thead>
-            <tr>
-                <th>Título</th>
-                <th>Banco</th>
-                <th>Consultas</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>{% for i in itens %}<tr>
-                <td>
-                    <a href="{{ url_for('scripts_editar', id=i.id) }}" class="table-link">
-                        {{i.titulo}}
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="scripts-modern-page">
+
+    <div class="scripts-hero">
+        <div class="scripts-title-row">
+            <div class="scripts-title-icon">
+                <i class="bi bi-file-earmark-code"></i>
+            </div>
+            <div>
+                <h3>Scripts SQL</h3>
+                <p>Gerencie todos os scripts disponíveis para a equipe N2.</p>
+            </div>
+        </div>
+
+        {% if is_admin %}
+        <a class="btn btn-primary scripts-new-btn" href="{{ url_for('scripts_novo') }}">
+            <i class="bi bi-plus-lg"></i>
+            Novo Script
+        </a>
+        {% endif %}
+    </div>
+
+    <form method="get" class="scripts-filter-bar">
+        <div class="scripts-search">
+            <i class="bi bi-search"></i>
+            <input
+                id="pesquisaScripts"
+                type="text"
+                name="busca"
+                value="{{ busca or '' }}"
+                placeholder="Buscar por título, descrição ou banco...">
+        </div>
+
+        <select id="filtroBanco" name="banco" class="form-select">
+            <option value="">Todos os bancos</option>
+            {% for b in bancos_disponiveis %}
+                <option value="{{ b }}" {% if banco == b %}selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="ordem" class="form-select">
+            <option value="recentes" {% if ordem == 'recentes' %}selected{% endif %}>Mais recentes</option>
+            <option value="az" {% if ordem == 'az' %}selected{% endif %}>A-Z</option>
+            <option value="za" {% if ordem == 'za' %}selected{% endif %}>Z-A</option>
+            <option value="banco" {% if ordem == 'banco' %}selected{% endif %}>Por banco</option>
+            <option value="acessos" {% if ordem == 'acessos' %}selected{% endif %}>Mais acessados</option>
+        </select>
+
+        <button class="btn btn-outline-primary scripts-filter-btn">
+            <i class="bi bi-funnel"></i>
+            Filtrar
+        </button>
+    </form>
+
+    <div class="scripts-layout">
+        <div class="scripts-main">
+
+            <div class="scripts-kpi-grid">
+                <div class="scripts-kpi-card kpi-purple">
+                    <div class="scripts-kpi-icon">
+                        <i class="bi bi-code-slash"></i>
+                    </div>
+                    <div>
+                        <span>Total Scripts</span>
+                        <h2>{{ total_scripts }}</h2>
+                        <p>Todos os scripts cadastrados</p>
+                    </div>
+                </div>
+
+                <div class="scripts-kpi-card kpi-blue">
+                    <div class="scripts-kpi-icon">
+                        <i class="bi bi-database"></i>
+                    </div>
+                    <div>
+                        <span>SQL Server</span>
+                        <h2>{{ sql_server_count }}</h2>
+                        <p>Scripts desse banco</p>
+                    </div>
+                </div>
+
+                <div class="scripts-kpi-card kpi-green">
+                    <div class="scripts-kpi-icon">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <div>
+                        <span>Consultas</span>
+                        <h2>{{ total_consultas }}</h2>
+                        <p>Total de consultas SQL</p>
+                    </div>
+                </div>
+
+                <div class="scripts-kpi-card kpi-orange">
+                    <div class="scripts-kpi-icon">
+                        <i class="bi bi-eye"></i>
+                    </div>
+                    <div>
+                        <span>Acessos</span>
+                        <h2>{{ total_acessos or 0 }}</h2>
+                        <p>Total de visualizações</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="scripts-card-grid">
+                {% for i in itens %}
+                <article class="script-card" data-banco="{{ i.tipo_banco }}">
+                    <div class="script-card-header">
+                        <div class="script-file-icon">
+                            <i class="bi bi-file-earmark-code"></i>
+                        </div>
+
+                        <div class="script-card-title">
+                            <a href="{{ url_for('scripts_ver', id=i.id) }}">
+                                {{ i.titulo }}
+                            </a>
+                            <p>
+                                {{ (i.descricao or i.observacoes or 'Sem descrição cadastrada.')|striptags|truncate(95) }}
+                            </p>
+                        </div>
+
+                        <span class="bank-badge
+                            {% if 'SQL Server' in i.tipo_banco or i.tipo_banco == 'SQL' %}bank-sqlserver
+                            {% elif 'MySQL' in i.tipo_banco %}bank-mysql
+                            {% elif 'PostgreSQL' in i.tipo_banco %}bank-postgres
+                            {% elif 'Access' in i.tipo_banco %}bank-access
+                            {% elif 'Oracle' in i.tipo_banco %}bank-oracle
+                            {% elif 'SQLite' in i.tipo_banco %}bank-sqlite
+                            {% elif 'Firebird' in i.tipo_banco %}bank-firebird
+                            {% endif %}">
+                            <i class="bi bi-database"></i>
+                            {{ i.tipo_banco }}
+                        </span>
+                    </div>
+
+                    <div class="script-card-metrics">
+                        <span><i class="bi bi-diagram-3"></i> {{ i.consultas|length }} consulta{{ 's' if i.consultas|length != 1 else '' }}</span>
+                        <span><i class="bi bi-eye"></i> {{ i.acessos or 0 }} acesso{{ 's' if (i.acessos or 0) != 1 else '' }}</span>
+                        <span><i class="bi bi-clock-history"></i> {{ i.updated_at.strftime('%d/%m/%Y') if i.updated_at else '-' }}</span>
+                    </div>
+
+                    <div class="script-card-footer">
+                        <div class="script-card-dates">
+                            <span>
+                                <i class="bi bi-calendar3"></i>
+                                Criado em<br>
+                                <strong>{{ i.created_at.strftime('%d/%m/%Y') if i.created_at else '-' }}</strong>
+                            </span>
+
+                            <span>
+                                <i class="bi bi-arrow-repeat"></i>
+                                Atualizado em<br>
+                                <strong>{{ i.updated_at.strftime('%d/%m/%Y') if i.updated_at else '-' }}</strong>
+                            </span>
+                        </div>
+
+                        <div class="script-card-actions">
+                            <a class="btn btn-primary btn-sm" href="{{ url_for('scripts_ver', id=i.id) }}">
+                                Abrir
+                            </a>
+
+                            {% if is_admin %}
+                            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('scripts_editar', id=i.id) }}">
+                                Editar
+                            </a>
+
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="dropdown" type="button">
+                                    <i class="bi bi-three-dots-vertical"></i>
+                                </button>
+
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('scripts_ver', id=i.id) }}">
+                                            <i class="bi bi-eye"></i>
+                                            Visualizar
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('scripts_editar', id=i.id) }}">
+                                            <i class="bi bi-pencil"></i>
+                                            Editar
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <form method="post" action="{{ url_for('scripts_excluir', id=i.id) }}"
+                                              onsubmit="return confirm('Deseja excluir este script?')">
+                                            <button class="dropdown-item text-danger">
+                                                <i class="bi bi-trash"></i>
+                                                Excluir
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </article>
+                {% else %}
+                <div class="scripts-empty">
+                    <i class="bi bi-search"></i>
+                    <h5>Nenhum script encontrado</h5>
+                    <p>Altere os filtros ou cadastre um novo script.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <aside class="scripts-side">
+            <div class="scripts-side-card">
+                <div class="scripts-side-header">
+                    <h6>Distribuição por banco</h6>
+                </div>
+
+                <div class="bank-distribution">
+                    {% for b in distribuicao_bancos %}
+                    <div>
+                        <span>{{ b.nome }}</span>
+                        <strong>{{ b.percentual }}%</strong>
+                    </div>
+                    <div class="progress scripts-progress">
+                        <div class="progress-bar" style="width: {{ b.percentual }}%"></div>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">Sem dados para exibir.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="scripts-side-card">
+                <div class="scripts-side-header">
+                    <h6><i class="bi bi-trophy text-warning"></i> Script mais utilizado</h6>
+                </div>
+
+                {% if top_scripts %}
+                {% set top = top_scripts[0] %}
+                <div class="top-script-box">
+                    <a href="{{ url_for('scripts_ver', id=top.id) }}">{{ top.titulo }}</a>
+                    <span><i class="bi bi-eye"></i> {{ top.acessos or 0 }} acesso{{ 's' if (top.acessos or 0) != 1 else '' }}</span>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Nenhum script cadastrado.</p>
+                {% endif %}
+            </div>
+
+            <div class="scripts-side-card">
+                <div class="scripts-side-header">
+                    <h6>Scripts mais acessados</h6>
+                </div>
+
+                <div class="top-list">
+                    {% for s in top_scripts %}
+                    <a href="{{ url_for('scripts_ver', id=s.id) }}">
+                        <span class="rank">{{ loop.index }}</span>
+                        <span>{{ s.titulo }}</span>
+                        <strong>{{ s.acessos or 0 }}</strong>
                     </a>
-                </td>
-                <td>{{i.tipo_banco}}</td>
-                <td>{{i.consultas|length}}</td>
-                <td><a class="btn btn-sm btn-outline-primary" href="{{url_for('scripts_ver',id=i.id)}}">Abrir</a></td>
-            </tr>{% endfor %}</tbody>
-    </table>
-</div>{% endblock %}
+                    {% else %}
+                    <p class="text-muted mb-0">Nenhum script cadastrado.</p>
+                    {% endfor %}
+                </div>
+
+                <a href="{{ url_for('scripts_listar') }}" class="btn btn-outline-primary w-100 mt-3">
+                    Ver todos os scripts
+                </a>
+            </div>
+
+            <div class="scripts-side-card">
+                <div class="scripts-side-header">
+                    <h6>Scripts com mais consultas</h6>
+                </div>
+
+                <div class="top-list">
+                    {% for s in top_consultas %}
+                    <a href="{{ url_for('scripts_ver', id=s.id) }}">
+                        <span class="rank">{{ loop.index }}</span>
+                        <span>{{ s.titulo }}</span>
+                        <strong>{{ s.consultas|length }}</strong>
+                    </a>
+                    {% else %}
+                    <p class="text-muted mb-0">Nenhum script cadastrado.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+{% endblock %}

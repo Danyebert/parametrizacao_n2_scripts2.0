@@ -67,3 +67,31 @@
 - Melhor organização da barra superior.
 - Melhor experiência de navegação entre telas.
 - Padronização da TopBar.
+
+# Versão 2.3.1 (08/07/2026)
+
+## Dashboard
+
+- Novo layout moderno para o Dashboard.
+- Cards KPI redesenhados com identidade visual.
+- Painéis com estilo profissional.
+- Breadcrumb fixo no topo.
+- Adicionado filtro de período (7, 15 e 30 dias).
+- Criado painel "Últimas Correções N2".
+- Criado painel "Últimos Scripts SQL".
+- Melhorias gerais na experiência visual.
+
+# Versão 2.3.2 (08/07/2026)
+
+## Scripts SQL
+
+- Modernizada a tela de listagem de Scripts SQL em formato de cards.
+- Adicionados cards de indicadores no topo da tela.
+- Adicionado contador de acessos aos scripts.
+- Adicionado filtro por banco.
+- Adicionada ordenação por mais recentes, A-Z, Z-A, banco e acessos.
+- Adicionada área lateral com distribuição por banco.
+- Adicionado ranking de scripts mais acessados.
+- Adicionado ranking de scripts com mais consultas.
+- Melhorias visuais no modo escuro.
+- Ajustado layout dos cards para manter os indicadores na mesma linha.

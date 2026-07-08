@@ -1,10 +1,10 @@
-// ==============================
+// ===========================================
 // Parametrização N2 Scripts
 // app.js
-// ==============================
+// ===========================================
 
 // ----------------------------
-// Tema do sistema
+// Tema
 // ----------------------------
 const html = document.documentElement;
 
@@ -31,6 +31,7 @@ document.getElementById("toggleTheme")?.addEventListener("click", () => {
 // ----------------------------
 // Sidebar
 // ----------------------------
+
 document.getElementById("toggleSidebar")?.addEventListener("click", () => {
 
     const sidebar = document.getElementById("sidebar");
@@ -61,9 +62,7 @@ function initCodeMirror(selector = ".codemirror-sql") {
 
     document.querySelectorAll(selector).forEach(textarea => {
 
-        if (textarea.dataset.cm) {
-            return;
-        }
+        if (textarea.dataset.cm) return;
 
         textarea.dataset.cm = "1";
 
@@ -100,21 +99,14 @@ function initCodeMirror(selector = ".codemirror-sql") {
 
             extraKeys: {
 
-                "F11": function (cm) {
-
-                    cm.setOption(
-                        "fullScreen",
-                        !cm.getOption("fullScreen")
-                    );
-
+                "F11": function(cm) {
+                    cm.setOption("fullScreen", !cm.getOption("fullScreen"));
                 },
 
-                "Esc": function (cm) {
-
+                "Esc": function(cm) {
                     if (cm.getOption("fullScreen")) {
                         cm.setOption("fullScreen", false);
                     }
-
                 }
 
             }
@@ -126,10 +118,6 @@ function initCodeMirror(selector = ".codemirror-sql") {
     });
 
 }
-
-// ----------------------------
-// Troca tema editor
-// ----------------------------
 
 function alterarTemaEditores() {
 
@@ -145,54 +133,7 @@ function alterarTemaEditores() {
 }
 
 // ----------------------------
-// Copiar SQL
-// ----------------------------
-
-function copiarSQL(botao) {
-
-    const consulta = botao.closest(".consulta");
-
-    const editor =
-        consulta.querySelector(".CodeMirror").CodeMirror;
-
-    navigator.clipboard.writeText(editor.getValue());
-
-    const texto = botao.innerHTML;
-
-    botao.innerHTML =
-        '<i class="bi bi-check-lg"></i> Copiado';
-
-    setTimeout(() => {
-
-        botao.innerHTML = texto;
-
-    }, 1500);
-
-}
-
-// ----------------------------
-// Tela cheia
-// ----------------------------
-
-function telaCheiaSQL(botao) {
-
-    const consulta = botao.closest(".consulta");
-
-    consulta.classList.toggle("sql-fullscreen");
-
-    const editor =
-        consulta.querySelector(".CodeMirror").CodeMirror;
-
-    setTimeout(() => {
-
-        editor.refresh();
-
-    }, 200);
-
-}
-
-// ----------------------------
-// Formatter
+// SQL Formatter
 // ----------------------------
 
 function getDialetoSQL() {
@@ -231,51 +172,194 @@ function formatarSQL(botao) {
 
     try {
 
-        const sql = sqlFormatter.format(
+        editor.setValue(
 
-            editor.getValue(),
+            sqlFormatter.format(
 
-            {
+                editor.getValue(),
 
-                language: getDialetoSQL(),
+                {
 
-                keywordCase: "upper",
+                    language: getDialetoSQL(),
 
-                indentStyle: "standard",
+                    keywordCase: "upper",
 
-                linesBetweenQueries: 2
+                    indentStyle: "standard",
 
-            }
+                    linesBetweenQueries: 2
+
+                }
+
+            )
 
         );
 
-        editor.setValue(sql);
-
         editor.refresh();
 
-    } catch (erro) {
+    } catch (e) {
+
+        console.error(e);
 
         alert("Erro ao formatar SQL.");
-
-        console.error(erro);
 
     }
 
 }
 
-// ----------------------------
-// Copiar texto
-// ----------------------------
+function copiarSQL(botao) {
 
-function copiarTexto(id) {
+    const consulta = botao.closest(".consulta");
 
-    navigator.clipboard.writeText(
+    const editor =
+        consulta.querySelector(".CodeMirror").CodeMirror;
 
-        document.getElementById(id).innerText
+    navigator.clipboard.writeText(editor.getValue());
 
-    );
+    const texto = botao.innerHTML;
+
+    botao.innerHTML =
+        '<i class="bi bi-check2"></i> Copiado';
+
+    setTimeout(() => {
+
+        botao.innerHTML = texto;
+
+    }, 1500);
 
 }
+
+function telaCheiaSQL(botao) {
+
+    const consulta = botao.closest(".consulta");
+
+    consulta.classList.toggle("sql-fullscreen");
+
+    const editor =
+        consulta.querySelector(".CodeMirror").CodeMirror;
+
+    setTimeout(() => {
+
+        editor.refresh();
+
+    }, 200);
+
+}
+
+// ----------------------------
+// Pesquisa dinâmica Scripts
+// ----------------------------
+
+function pesquisarScripts() {
+
+    const campo = document.getElementById("pesquisaScripts");
+
+    if (!campo) return;
+
+    const filtro = campo.value.toLowerCase();
+
+    document.querySelectorAll(".script-card").forEach(card => {
+
+        card.style.display =
+            card.innerText.toLowerCase().includes(filtro)
+                ? ""
+                : "none";
+
+    });
+
+}
+
+// ----------------------------
+// Filtro Banco
+// ----------------------------
+
+function filtrarBanco() {
+
+    const select = document.getElementById("filtroBanco");
+
+    if (!select) return;
+
+    const valor = select.value;
+
+    document.querySelectorAll(".script-card").forEach(card => {
+
+        if (
+            valor === "" ||
+            card.dataset.banco === valor
+        ) {
+
+            card.style.display = "";
+
+        } else {
+
+            card.style.display = "none";
+
+        }
+
+    });
+
+}
+
+// ----------------------------
+// Contadores animados
+// ----------------------------
+
+function animarContadores() {
+
+    document.querySelectorAll(".counter").forEach(counter => {
+
+        const destino =
+            parseInt(counter.dataset.value);
+
+        if (isNaN(destino)) return;
+
+        let atual = 0;
+
+        const incremento =
+            Math.max(1, Math.ceil(destino / 50));
+
+        const timer = setInterval(() => {
+
+            atual += incremento;
+
+            if (atual >= destino) {
+
+                atual = destino;
+
+                clearInterval(timer);
+
+            }
+
+            counter.innerText = atual;
+
+        }, 20);
+
+    });
+
+}
+
+// ----------------------------
+// Hover cards
+// ----------------------------
+
+document.addEventListener("mouseover", e => {
+
+    const card = e.target.closest(".script-card");
+
+    if (!card) return;
+
+    card.classList.add("hover");
+
+});
+
+document.addEventListener("mouseout", e => {
+
+    const card = e.target.closest(".script-card");
+
+    if (!card) return;
+
+    card.classList.remove("hover");
+
+});
 
 // ----------------------------
 // Inicialização
@@ -284,5 +368,15 @@ function copiarTexto(id) {
 document.addEventListener("DOMContentLoaded", () => {
 
     initCodeMirror();
+
+    animarContadores();
+
+    document
+        .getElementById("pesquisaScripts")
+        ?.addEventListener("keyup", pesquisarScripts);
+
+    document
+        .getElementById("filtroBanco")
+        ?.addEventListener("change", filtrarBanco);
 
 });

@@ -4,7 +4,7 @@ from functools import wraps
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_
+from sqlalchemy import or_, func, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -53,6 +53,7 @@ class ScriptSQL(db.Model, TimestampMixin):
     tipo_banco = db.Column(db.String(80), nullable=False)
     descricao = db.Column(db.Text)
     observacoes = db.Column(db.Text)
+    acessos = db.Column(db.Integer, default=0, nullable=False)
     consultas = db.relationship("ConsultaSQL", backref="script", lazy=True, cascade="all, delete-orphan")
 
 class ConsultaSQL(db.Model, TimestampMixin):
@@ -84,6 +85,15 @@ class ArquivoDownload(db.Model, TimestampMixin):
     downloads = db.Column(db.Integer, default=0)
 
 
+
+def ensure_schema_updates():
+    """Aplica pequenas alterações de schema que o db.create_all() não faz em tabelas existentes."""
+    try:
+        db.session.execute(text("ALTER TABLE scripts_sql ADD COLUMN IF NOT EXISTS acessos INTEGER DEFAULT 0 NOT NULL"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
@@ -99,6 +109,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        ensure_schema_updates()
         create_default_admin()
 
     register_routes(app)
@@ -148,7 +159,7 @@ def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.3.1",
+                "APP_VERSION": "2.3.2",
                 "APP_BUILD": "2026-07-08",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
@@ -284,17 +295,110 @@ def register_routes(app):
 
     @app.route("/scripts")
     def scripts_listar():
-        busca = request.args.get("busca", "")
-        q = ScriptSQL.query.filter_by(deleted_at=None)
-        if busca: q = q.filter(or_(ScriptSQL.titulo.ilike(f"%{busca}%"), ScriptSQL.tipo_banco.ilike(f"%{busca}%")))
-        return render_template("scripts/list.html", itens=q.order_by(ScriptSQL.updated_at.desc()).all())
+        busca = (request.args.get("busca") or "").strip()
+        banco = (request.args.get("banco") or "").strip()
+        ordem = (request.args.get("ordem") or "recentes").strip()
+
+        base = ScriptSQL.query.filter_by(deleted_at=None)
+
+        bancos_disponiveis = [
+            r[0] for r in db.session.query(ScriptSQL.tipo_banco)
+            .filter(ScriptSQL.deleted_at == None, ScriptSQL.tipo_banco != None)
+            .distinct()
+            .order_by(ScriptSQL.tipo_banco)
+            .all()
+        ]
+
+        total_scripts = base.count()
+        sql_server_count = base.filter(
+            or_(
+                ScriptSQL.tipo_banco.ilike("%SQL Server%"),
+                ScriptSQL.tipo_banco.ilike("SQL")
+            )
+        ).count()
+
+        total_consultas = db.session.query(ConsultaSQL).join(ScriptSQL).filter(
+            ScriptSQL.deleted_at == None
+        ).count()
+
+        total_acessos = db.session.query(func.coalesce(func.sum(ScriptSQL.acessos), 0)).filter(ScriptSQL.deleted_at == None).scalar() or 0
+
+        distribuicao_bancos = []
+        for nome_banco in bancos_disponiveis:
+            qtd = base.filter(ScriptSQL.tipo_banco == nome_banco).count()
+            percentual = round((qtd / total_scripts) * 100) if total_scripts else 0
+            distribuicao_bancos.append({
+                "nome": nome_banco,
+                "qtd": qtd,
+                "percentual": percentual
+            })
+
+        q = base
+
+        if busca:
+            q = q.filter(or_(
+                ScriptSQL.titulo.ilike(f"%{busca}%"),
+                ScriptSQL.tipo_banco.ilike(f"%{busca}%"),
+                ScriptSQL.descricao.ilike(f"%{busca}%"),
+                ScriptSQL.observacoes.ilike(f"%{busca}%")
+            ))
+
+        if banco:
+            q = q.filter(ScriptSQL.tipo_banco == banco)
+
+        if ordem == "az":
+            q = q.order_by(ScriptSQL.titulo.asc())
+        elif ordem == "za":
+            q = q.order_by(ScriptSQL.titulo.desc())
+        elif ordem == "banco":
+            q = q.order_by(ScriptSQL.tipo_banco.asc(), ScriptSQL.titulo.asc())
+        elif ordem == "acessos":
+            q = q.order_by(ScriptSQL.acessos.desc(), ScriptSQL.updated_at.desc())
+        else:
+            q = q.order_by(ScriptSQL.updated_at.desc())
+
+        itens = q.all()
+
+        todos_scripts = base.all()
+
+        top_scripts = ScriptSQL.query.filter_by(deleted_at=None).order_by(
+            ScriptSQL.acessos.desc(),
+            ScriptSQL.updated_at.desc()
+        ).limit(5).all()
+
+        top_consultas = sorted(
+            todos_scripts,
+            key=lambda s: len(s.consultas),
+            reverse=True
+        )[:5]
+
+        return render_template(
+            "scripts/list.html",
+            itens=itens,
+            busca=busca,
+            banco=banco,
+            ordem=ordem,
+            bancos_disponiveis=bancos_disponiveis,
+            total_scripts=total_scripts,
+            sql_server_count=sql_server_count,
+            total_consultas=total_consultas,
+            total_acessos=total_acessos,
+            favoritos=0,
+            distribuicao_bancos=distribuicao_bancos,
+            top_scripts=top_scripts,
+            top_consultas=top_consultas
+        )
 
     @app.route("/scripts/novo", methods=["GET", "POST"])
     @admin_required
     def scripts_novo(): return salvar_script()
 
     @app.route("/scripts/<int:id>")
-    def scripts_ver(id): return render_template("scripts/view.html", item=ScriptSQL.query.filter_by(id=id, deleted_at=None).first_or_404())
+    def scripts_ver(id):
+        item = ScriptSQL.query.filter_by(id=id, deleted_at=None).first_or_404()
+        item.acessos = (item.acessos or 0) + 1
+        db.session.commit()
+        return render_template("scripts/view.html", item=item)
 
     @app.route("/scripts/<int:id>/editar", methods=["GET", "POST"])
     @admin_required
