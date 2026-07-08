@@ -15,7 +15,11 @@
             </tr>
         </thead>
         <tbody>{% for i in itens %}<tr>
-                <td>{{i.titulo}}</td>
+                <td>
+                    <a href="{{ url_for('scripts_editar', id=i.id) }}" class="table-link">
+                        {{i.titulo}}
+                    </a>
+                </td>
                 <td>{{i.tipo_banco}}</td>
                 <td>{{i.consultas|length}}</td>
                 <td><a class="btn btn-sm btn-outline-primary" href="{{url_for('scripts_ver',id=i.id)}}">Abrir</a></td>

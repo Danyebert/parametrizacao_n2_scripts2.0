@@ -31,7 +31,11 @@
             </tr>
         </thead>
         <tbody>{% for i in itens %}<tr>
-                <td>{{i.titulo}}</td>
+                <td>
+                    <a href="{{ url_for('correcoes_editar', id=i.id) }}" class="table-link">
+                        {{i.titulo}}
+                    </a>
+                </td>
                 <td>{{i.sistema}}</td>
                 <td>{{i.categoria}}</td>
                 <td><span

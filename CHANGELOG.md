@@ -30,7 +30,7 @@
 ## Versão 2.1.1 (08/07/2026)
 
 ### Correções
-
 - Corrigido comportamento da sidebar ao recolher.
-- Ajustado rodapé de versão para acompanhar o estado da sidebar.
-- Pequenos ajustes de layout e CSS.
+- Ajustado rodapé de versão.
+- Adicionada navegação pelo título nas telas de Scripts SQL e Correções N2.
+- Pequenos ajustes de interface.
