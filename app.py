@@ -150,7 +150,10 @@ def get_file_listing(modulo):
 def register_routes(app):
     @app.context_processor
     def inject_globals():
-        return {"is_admin": is_admin()}
+        return {"is_admin": is_admin(),
+                "APP_VERSION": "2.1.0",
+                "APP_BUILD": "2026-07-07",
+                "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
     @app.route("/")
     def dashboard():
