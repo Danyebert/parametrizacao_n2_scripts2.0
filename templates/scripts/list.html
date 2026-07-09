@@ -58,7 +58,7 @@
         <div class="scripts-main">
 
             <div class="scripts-kpi-grid">
-                <div class="scripts-kpi-card kpi-purple">
+                <div class="scripts-kpi-card kpi-purple has-real-sparkline">
                     <div class="scripts-kpi-icon">
                         <i class="bi bi-code-slash"></i>
                     </div>
@@ -67,9 +67,23 @@
                         <h2>{{ total_scripts }}</h2>
                         <p>Todos os scripts cadastrados</p>
                     </div>
+
+                    <div class="real-sparkline" aria-label="Histórico de scripts cadastrados">
+                        {% set maior = sparkline_total_scripts|max if sparkline_total_scripts else 1 %}
+                        {% for valor in sparkline_total_scripts %}
+                            {% set dia = sparkline_dias[loop.index0] if sparkline_dias is defined and sparkline_dias|length > loop.index0 else 'Dia ' ~ loop.index %}
+                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                            <span
+                                class="spark-bar"
+                                style="height: {{ altura if altura > 4 else 4 }}px"
+                                title="{{ dia }} - {{ valor }} script{{ 's' if valor != 1 else '' }}"
+                                data-tooltip="{{ dia }} - {{ valor }} script{{ 's' if valor != 1 else '' }}">
+                            </span>
+                        {% endfor %}
+                    </div>
                 </div>
 
-                <div class="scripts-kpi-card kpi-blue">
+                <div class="scripts-kpi-card kpi-blue has-real-sparkline">
                     <div class="scripts-kpi-icon">
                         <i class="bi bi-database"></i>
                     </div>
@@ -78,9 +92,23 @@
                         <h2>{{ sql_server_count }}</h2>
                         <p>Scripts desse banco</p>
                     </div>
+
+                    <div class="real-sparkline" aria-label="Histórico de scripts SQL Server">
+                        {% set maior = sparkline_sql_server|max if sparkline_sql_server else 1 %}
+                        {% for valor in sparkline_sql_server %}
+                            {% set dia = sparkline_dias[loop.index0] if sparkline_dias is defined and sparkline_dias|length > loop.index0 else 'Dia ' ~ loop.index %}
+                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                            <span
+                                class="spark-bar"
+                                style="height: {{ altura if altura > 4 else 4 }}px"
+                                title="{{ dia }} - {{ valor }} script{{ 's' if valor != 1 else '' }} SQL Server"
+                                data-tooltip="{{ dia }} - {{ valor }} script{{ 's' if valor != 1 else '' }} SQL Server">
+                            </span>
+                        {% endfor %}
+                    </div>
                 </div>
 
-                <div class="scripts-kpi-card kpi-green">
+                <div class="scripts-kpi-card kpi-green has-real-sparkline">
                     <div class="scripts-kpi-icon">
                         <i class="bi bi-graph-up-arrow"></i>
                     </div>
@@ -89,9 +117,23 @@
                         <h2>{{ total_consultas }}</h2>
                         <p>Total de consultas SQL</p>
                     </div>
+
+                    <div class="real-sparkline" aria-label="Histórico de consultas SQL">
+                        {% set maior = sparkline_consultas|max if sparkline_consultas else 1 %}
+                        {% for valor in sparkline_consultas %}
+                            {% set dia = sparkline_dias[loop.index0] if sparkline_dias is defined and sparkline_dias|length > loop.index0 else 'Dia ' ~ loop.index %}
+                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                            <span
+                                class="spark-bar"
+                                style="height: {{ altura if altura > 4 else 4 }}px"
+                                title="{{ dia }} - {{ valor }} consulta{{ 's' if valor != 1 else '' }}"
+                                data-tooltip="{{ dia }} - {{ valor }} consulta{{ 's' if valor != 1 else '' }}">
+                            </span>
+                        {% endfor %}
+                    </div>
                 </div>
 
-                <div class="scripts-kpi-card kpi-orange">
+                <div class="scripts-kpi-card kpi-orange has-real-sparkline">
                     <div class="scripts-kpi-icon">
                         <i class="bi bi-eye"></i>
                     </div>
@@ -99,6 +141,20 @@
                         <span>Acessos</span>
                         <h2>{{ total_acessos or 0 }}</h2>
                         <p>Total de visualizações</p>
+                    </div>
+
+                    <div class="real-sparkline" aria-label="Histórico de acessos aos scripts">
+                        {% set maior = sparkline_acessos|max if sparkline_acessos else 1 %}
+                        {% for valor in sparkline_acessos %}
+                            {% set dia = sparkline_dias[loop.index0] if sparkline_dias is defined and sparkline_dias|length > loop.index0 else 'Dia ' ~ loop.index %}
+                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                            <span
+                                class="spark-bar"
+                                style="height: {{ altura if altura > 4 else 4 }}px"
+                                title="{{ dia }} - {{ valor }} acesso{{ 's' if valor != 1 else '' }}"
+                                data-tooltip="{{ dia }} - {{ valor }} acesso{{ 's' if valor != 1 else '' }}">
+                            </span>
+                        {% endfor %}
                     </div>
                 </div>
             </div>

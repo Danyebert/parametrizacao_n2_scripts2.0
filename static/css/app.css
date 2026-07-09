@@ -1149,3 +1149,234 @@ body {
         grid-template-columns: 1fr !important;
     }
 }
+
+
+/* =========================================================
+   Scripts SQL - Sparklines reais nos cards KPI
+   ========================================================= */
+.scripts-kpi-card.has-real-sparkline {
+    padding-bottom: 56px !important;
+}
+
+.scripts-kpi-card.has-real-sparkline::after {
+    display: none !important;
+}
+
+.real-sparkline {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 14px;
+    height: 34px;
+    display: flex;
+    align-items: end;
+    gap: 5px;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.real-sparkline span {
+    flex: 1;
+    min-height: 4px;
+    border-radius: 999px 999px 3px 3px;
+    background: linear-gradient(180deg, #0d6efd, #20c997);
+    opacity: .9;
+    box-shadow: 0 0 10px rgba(13, 110, 253, .25);
+}
+
+.kpi-purple .real-sparkline span {
+    background: linear-gradient(180deg, #a370f7, #6f42c1);
+}
+
+.kpi-blue .real-sparkline span {
+    background: linear-gradient(180deg, #0dcaf0, #0d6efd);
+}
+
+.kpi-green .real-sparkline span {
+    background: linear-gradient(180deg, #20c997, #198754);
+}
+
+.kpi-orange .real-sparkline span {
+    background: linear-gradient(180deg, #ffc107, #fd7e14);
+}
+
+@media (max-width: 768px) {
+    .scripts-kpi-card.has-real-sparkline {
+        padding-bottom: 50px !important;
+    }
+}
+
+
+/* =========================================================
+   Scripts SQL - Sparklines reais
+   ========================================================= */
+
+.scripts-kpi-card.has-real-sparkline{
+    padding-bottom:56px!important;
+    overflow:visible!important;
+}
+
+.scripts-kpi-card.has-real-sparkline::after{
+    display:none!important;
+}
+
+.real-sparkline{
+    position:absolute;
+    left:18px;
+    right:18px;
+    bottom:14px;
+    height:34px;
+
+    display:flex;
+    align-items:flex-end;
+    gap:5px;
+
+    overflow:visible!important;
+    pointer-events:auto;
+    z-index:50;
+}
+
+.real-sparkline span{
+    flex:1;
+    min-height:4px;
+
+    border-radius:999px 999px 3px 3px;
+
+    cursor:pointer;
+    position:relative;
+
+    transition:.18s;
+}
+
+.real-sparkline span:hover{
+    transform:scaleY(1.20);
+    filter:brightness(1.15);
+}
+
+/* CORES */
+
+.kpi-purple .real-sparkline span{
+    background:linear-gradient(180deg,#9b5cff,#6f42c1);
+}
+
+.kpi-blue .real-sparkline span{
+    background:linear-gradient(180deg,#20c9ff,#0d6efd);
+}
+
+.kpi-green .real-sparkline span{
+    background:linear-gradient(180deg,#20c997,#198754);
+}
+
+.kpi-orange .real-sparkline span{
+    background:linear-gradient(180deg,#ffc107,#fd7e14);
+}
+
+/* TOOLTIP */
+
+.real-sparkline span::before{
+
+    content:attr(data-tooltip);
+
+    position:absolute;
+
+    bottom:calc(100% + 12px);
+    left:50%;
+
+    transform:translateX(-50%) translateY(6px);
+
+    background:#111827;
+
+    color:#fff;
+
+    padding:7px 10px;
+
+    border-radius:8px;
+
+    font-size:11px;
+
+    font-weight:700;
+
+    white-space:nowrap;
+
+    box-shadow:0 12px 25px rgba(0,0,0,.35);
+
+    opacity:0;
+    visibility:hidden;
+
+    transition:.18s;
+
+    z-index:99999;
+}
+
+.real-sparkline span::after{
+
+    content:"";
+
+    position:absolute;
+
+    bottom:calc(100% + 3px);
+    left:50%;
+
+    transform:translateX(-50%) translateY(6px);
+
+    border:5px solid transparent;
+    border-top-color:#111827;
+
+    opacity:0;
+    visibility:hidden;
+
+    transition:.18s;
+
+    z-index:99999;
+}
+
+.real-sparkline span:hover::before,
+.real-sparkline span:hover::after{
+
+    opacity:1;
+    visibility:visible;
+
+    transform:translateX(-50%) translateY(0);
+}
+
+/* primeira barra */
+
+.real-sparkline span:first-child::before{
+    left:0;
+    transform:translateX(0) translateY(6px);
+}
+
+.real-sparkline span:first-child:hover::before{
+    transform:translateX(0) translateY(0);
+}
+
+.real-sparkline span:first-child::after{
+    left:10px;
+}
+
+/* última barra */
+
+.real-sparkline span:last-child::before{
+    left:auto;
+    right:0;
+    transform:translateX(0) translateY(6px);
+}
+
+.real-sparkline span:last-child:hover::before{
+    transform:translateX(0) translateY(0);
+}
+
+.real-sparkline span:last-child::after{
+    left:auto;
+    right:10px;
+}
+
+/* RESPONSIVO */
+
+@media(max-width:768px){
+
+    .scripts-kpi-card.has-real-sparkline{
+        padding-bottom:50px!important;
+    }
+
+}

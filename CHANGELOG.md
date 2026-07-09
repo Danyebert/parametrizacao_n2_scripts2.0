@@ -95,3 +95,27 @@
 - Adicionado ranking de scripts com mais consultas.
 - Melhorias visuais no modo escuro.
 - Ajustado layout dos cards para manter os indicadores na mesma linha.
+
+
+## v2.4.0 - 09/07/2026
+
+### Novo
+- Contabilização automática de acessos aos Scripts SQL.
+- Ranking de scripts mais acessados.
+- Estatísticas reais de acessos.
+- Sparklines dinâmicas nos cards.
+- Tooltips interativos mostrando acessos por dia.
+- Dashboard dos Scripts totalmente remodelado.
+
+### Melhorias
+- Layout responsivo dos KPIs.
+- Cards alinhados em uma única linha.
+- Melhor distribuição visual dos componentes.
+- Correção da renderização dos gráficos.
+- Ajustes na sidebar lateral.
+- Melhor experiência visual no tema escuro.
+
+### Correções
+- Correção dos tooltips cortados.
+- Ajuste do overflow dos gráficos.
+- Correção da exibição da primeira e última barra dos sparklines.

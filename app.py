@@ -1,5 +1,5 @@
 import os, io, json, zipfile, unicodedata, re
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, abort, jsonify
@@ -55,6 +55,14 @@ class ScriptSQL(db.Model, TimestampMixin):
     observacoes = db.Column(db.Text)
     acessos = db.Column(db.Integer, default=0, nullable=False)
     consultas = db.relationship("ConsultaSQL", backref="script", lazy=True, cascade="all, delete-orphan")
+
+class ScriptAcesso(db.Model):
+    __tablename__ = "scripts_acessos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    script_id = db.Column(db.Integer, db.ForeignKey("scripts_sql.id"), nullable=False)
+    data_acesso = db.Column(db.Date, default=lambda: datetime.utcnow().date(), nullable=False)
+    quantidade = db.Column(db.Integer, default=1, nullable=False)
 
 class ConsultaSQL(db.Model, TimestampMixin):
     __tablename__ = "consultas_sql"
@@ -155,12 +163,40 @@ def get_file_listing(modulo):
     ).order_by(ArquivoDownload.nome).all()
 
 
+
+def gerar_sparkline(valores, tamanho=7):
+    valores = list(valores or [])
+    if len(valores) < tamanho:
+        valores = ([0] * (tamanho - len(valores))) + valores
+    return valores[-tamanho:]
+
+
+def contar_por_dia_registros(registros, campo_data, inicio, dias=7):
+    mapa = {}
+    for item in registros:
+        valor_data = getattr(item, campo_data, None)
+        if not valor_data:
+            continue
+
+        dia = valor_data.date() if hasattr(valor_data, "date") else valor_data
+
+        if dia < inicio:
+            continue
+
+        mapa[dia] = mapa.get(dia, 0) + 1
+
+    return [
+        mapa.get(inicio + timedelta(days=i), 0)
+        for i in range(dias)
+    ]
+
+
 def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.3.2",
-                "APP_BUILD": "2026-07-08",
+                "APP_VERSION": "2.4.0",
+                "APP_BUILD": "2026-07-09",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
     @app.route("/")
@@ -299,6 +335,9 @@ def register_routes(app):
         banco = (request.args.get("banco") or "").strip()
         ordem = (request.args.get("ordem") or "recentes").strip()
 
+        hoje = datetime.utcnow().date()
+        inicio_7_dias = hoje - timedelta(days=6)
+
         base = ScriptSQL.query.filter_by(deleted_at=None)
 
         bancos_disponiveis = [
@@ -322,6 +361,46 @@ def register_routes(app):
         ).count()
 
         total_acessos = db.session.query(func.coalesce(func.sum(ScriptSQL.acessos), 0)).filter(ScriptSQL.deleted_at == None).scalar() or 0
+
+        scripts_7_dias_base = base.filter(ScriptSQL.created_at >= datetime.combine(inicio_7_dias, datetime.min.time())).all()
+
+        sparkline_total_scripts = contar_por_dia_registros(
+            scripts_7_dias_base,
+            "created_at",
+            inicio_7_dias
+        )
+
+        sparkline_sql_server = contar_por_dia_registros(
+            [
+                s for s in scripts_7_dias_base
+                if s.tipo_banco and ("sql server" in s.tipo_banco.lower() or s.tipo_banco.lower() == "sql")
+            ],
+            "created_at",
+            inicio_7_dias
+        )
+
+        consultas_7_dias = ConsultaSQL.query.filter(
+            ConsultaSQL.created_at >= datetime.combine(inicio_7_dias, datetime.min.time())
+        ).all()
+
+        sparkline_consultas = contar_por_dia_registros(
+            consultas_7_dias,
+            "created_at",
+            inicio_7_dias
+        )
+
+        acessos_7_dias = ScriptAcesso.query.filter(
+            ScriptAcesso.data_acesso >= inicio_7_dias
+        ).all()
+
+        mapa_acessos = {}
+        for acesso in acessos_7_dias:
+            mapa_acessos[acesso.data_acesso] = mapa_acessos.get(acesso.data_acesso, 0) + (acesso.quantidade or 0)
+
+        sparkline_acessos = [
+            mapa_acessos.get(inicio_7_dias + timedelta(days=i), 0)
+            for i in range(7)
+        ]
 
         distribuicao_bancos = []
         for nome_banco in bancos_disponiveis:
@@ -386,7 +465,11 @@ def register_routes(app):
             favoritos=0,
             distribuicao_bancos=distribuicao_bancos,
             top_scripts=top_scripts,
-            top_consultas=top_consultas
+            top_consultas=top_consultas,
+            sparkline_total_scripts=sparkline_total_scripts,
+            sparkline_sql_server=sparkline_sql_server,
+            sparkline_consultas=sparkline_consultas,
+            sparkline_acessos=sparkline_acessos
         )
 
     @app.route("/scripts/novo", methods=["GET", "POST"])
@@ -396,7 +479,25 @@ def register_routes(app):
     @app.route("/scripts/<int:id>")
     def scripts_ver(id):
         item = ScriptSQL.query.filter_by(id=id, deleted_at=None).first_or_404()
+
         item.acessos = (item.acessos or 0) + 1
+
+        hoje = datetime.utcnow().date()
+
+        acesso_dia = ScriptAcesso.query.filter_by(
+            script_id=item.id,
+            data_acesso=hoje
+        ).first()
+
+        if acesso_dia:
+            acesso_dia.quantidade = (acesso_dia.quantidade or 0) + 1
+        else:
+            db.session.add(ScriptAcesso(
+                script_id=item.id,
+                data_acesso=hoje,
+                quantidade=1
+            ))
+
         db.session.commit()
         return render_template("scripts/view.html", item=item)
 
