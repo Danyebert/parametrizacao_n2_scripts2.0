@@ -36,6 +36,7 @@ class CorrecaoN2(db.Model, TimestampMixin):
     erro = db.Column(db.Text)
     causa = db.Column(db.Text)
     correcao = db.Column(db.Text)
+    acessos = db.Column(db.Integer, default=0, nullable=False)
     anexos = db.relationship("AnexoCorrecao", backref="correcao", lazy=True)
 
 class AnexoCorrecao(db.Model, TimestampMixin):
@@ -45,6 +46,14 @@ class AnexoCorrecao(db.Model, TimestampMixin):
     nome_arquivo = db.Column(db.String(255), nullable=False)
     mime_type = db.Column(db.String(100), nullable=False)
     conteudo = db.Column(db.LargeBinary, nullable=False)
+
+class CorrecaoAcesso(db.Model):
+    __tablename__ = "correcoes_acessos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    correcao_id = db.Column(db.Integer, db.ForeignKey("correcoes_n2.id"), nullable=False)
+    data_acesso = db.Column(db.Date, default=lambda: datetime.utcnow().date(), nullable=False)
+    quantidade = db.Column(db.Integer, default=1, nullable=False)
 
 class ScriptSQL(db.Model, TimestampMixin):
     __tablename__ = "scripts_sql"
@@ -98,6 +107,23 @@ def ensure_schema_updates():
     """Aplica pequenas alterações de schema que o db.create_all() não faz em tabelas existentes."""
     try:
         db.session.execute(text("ALTER TABLE scripts_sql ADD COLUMN IF NOT EXISTS acessos INTEGER DEFAULT 0 NOT NULL"))
+        db.session.execute(text("ALTER TABLE correcoes_n2 ADD COLUMN IF NOT EXISTS acessos INTEGER DEFAULT 0 NOT NULL"))
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS correcoes_acessos (
+                id SERIAL PRIMARY KEY,
+                correcao_id INTEGER NOT NULL REFERENCES correcoes_n2(id),
+                data_acesso DATE NOT NULL DEFAULT CURRENT_DATE,
+                quantidade INTEGER NOT NULL DEFAULT 1
+            )
+        """))
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS scripts_acessos (
+                id SERIAL PRIMARY KEY,
+                script_id INTEGER NOT NULL REFERENCES scripts_sql(id),
+                data_acesso DATE NOT NULL DEFAULT CURRENT_DATE,
+                quantidade INTEGER NOT NULL DEFAULT 1
+            )
+        """))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -195,7 +221,7 @@ def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.4.0",
+                "APP_VERSION": "2.5.0",
                 "APP_BUILD": "2026-07-09",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
@@ -260,13 +286,145 @@ def register_routes(app):
 
     @app.route("/correcoes")
     def correcoes_listar():
-        q = CorrecaoN2.query.filter_by(deleted_at=None)
-        busca = request.args.get("busca", "").strip(); categoria = request.args.get("categoria", ""); criticidade = request.args.get("criticidade", "")
-        if busca: q = q.filter(or_(CorrecaoN2.titulo.ilike(f"%{busca}%"), CorrecaoN2.sistema.ilike(f"%{busca}%"), CorrecaoN2.erro.ilike(f"%{busca}%")))
-        if categoria: q = q.filter(CorrecaoN2.categoria == categoria)
-        if criticidade: q = q.filter(CorrecaoN2.criticidade == criticidade)
-        categorias = [r[0] for r in db.session.query(CorrecaoN2.categoria).filter(CorrecaoN2.deleted_at==None, CorrecaoN2.categoria!=None).distinct()]
-        return render_template("correcoes/list.html", itens=q.order_by(CorrecaoN2.updated_at.desc()).all(), categorias=categorias)
+        busca = (request.args.get("busca") or "").strip()
+        categoria = (request.args.get("categoria") or "").strip()
+        criticidade = (request.args.get("criticidade") or "").strip()
+        ordem = (request.args.get("ordem") or "recentes").strip()
+
+        hoje = datetime.utcnow().date()
+        inicio_7_dias = hoje - timedelta(days=6)
+
+        base = CorrecaoN2.query.filter_by(deleted_at=None)
+
+        categorias = [
+            r[0] for r in db.session.query(CorrecaoN2.categoria)
+            .filter(CorrecaoN2.deleted_at == None, CorrecaoN2.categoria != None)
+            .distinct()
+            .order_by(CorrecaoN2.categoria)
+            .all()
+        ]
+
+        total_correcoes = base.count()
+        alta_count = base.filter(CorrecaoN2.criticidade == "Alta").count()
+        total_categorias = len(categorias)
+        total_acessos = db.session.query(func.coalesce(func.sum(CorrecaoN2.acessos), 0)).filter(
+            CorrecaoN2.deleted_at == None
+        ).scalar() or 0
+
+        correcoes_7_dias = base.filter(
+            CorrecaoN2.created_at >= datetime.combine(inicio_7_dias, datetime.min.time())
+        ).all()
+
+        sparkline_total_correcoes = contar_por_dia_registros(
+            correcoes_7_dias,
+            "created_at",
+            inicio_7_dias
+        )
+
+        sparkline_altas = contar_por_dia_registros(
+            [c for c in correcoes_7_dias if (c.criticidade or "").lower() == "alta"],
+            "created_at",
+            inicio_7_dias
+        )
+
+        categorias_7_dias = {}
+        for c in correcoes_7_dias:
+            dia = c.created_at.date() if c.created_at else None
+            if not dia:
+                continue
+            categorias_7_dias.setdefault(dia, set()).add(c.categoria or "Sem categoria")
+
+        sparkline_categorias = [
+            len(categorias_7_dias.get(inicio_7_dias + timedelta(days=i), set()))
+            for i in range(7)
+        ]
+
+        acessos_7_dias = CorrecaoAcesso.query.filter(
+            CorrecaoAcesso.data_acesso >= inicio_7_dias
+        ).all()
+
+        mapa_acessos = {}
+        for acesso in acessos_7_dias:
+            mapa_acessos[acesso.data_acesso] = mapa_acessos.get(acesso.data_acesso, 0) + (acesso.quantidade or 0)
+
+        sparkline_acessos = [
+            mapa_acessos.get(inicio_7_dias + timedelta(days=i), 0)
+            for i in range(7)
+        ]
+
+        distribuicao_criticidade = []
+        for nome in ["Alta", "Média", "Baixa"]:
+            qtd = base.filter(CorrecaoN2.criticidade == nome).count()
+            percentual = round((qtd / total_correcoes) * 100) if total_correcoes else 0
+            distribuicao_criticidade.append({"nome": nome, "qtd": qtd, "percentual": percentual})
+
+        distribuicao_categorias = []
+        for nome_categoria in categorias:
+            qtd = base.filter(CorrecaoN2.categoria == nome_categoria).count()
+            percentual = round((qtd / total_correcoes) * 100) if total_correcoes else 0
+            distribuicao_categorias.append({"nome": nome_categoria or "Sem categoria", "qtd": qtd, "percentual": percentual})
+
+        q = base
+
+        if busca:
+            q = q.filter(or_(
+                CorrecaoN2.titulo.ilike(f"%{busca}%"),
+                CorrecaoN2.sistema.ilike(f"%{busca}%"),
+                CorrecaoN2.categoria.ilike(f"%{busca}%"),
+                CorrecaoN2.erro.ilike(f"%{busca}%"),
+                CorrecaoN2.causa.ilike(f"%{busca}%"),
+                CorrecaoN2.correcao.ilike(f"%{busca}%")
+            ))
+
+        if categoria:
+            q = q.filter(CorrecaoN2.categoria == categoria)
+
+        if criticidade:
+            q = q.filter(CorrecaoN2.criticidade == criticidade)
+
+        if ordem == "az":
+            q = q.order_by(CorrecaoN2.titulo.asc())
+        elif ordem == "za":
+            q = q.order_by(CorrecaoN2.titulo.desc())
+        elif ordem == "criticidade":
+            q = q.order_by(CorrecaoN2.criticidade.asc(), CorrecaoN2.updated_at.desc())
+        elif ordem == "acessos":
+            q = q.order_by(CorrecaoN2.acessos.desc(), CorrecaoN2.updated_at.desc())
+        else:
+            q = q.order_by(CorrecaoN2.updated_at.desc())
+
+        itens = q.all()
+
+        top_correcoes = CorrecaoN2.query.filter_by(deleted_at=None).order_by(
+            CorrecaoN2.acessos.desc(),
+            CorrecaoN2.updated_at.desc()
+        ).limit(5).all()
+
+        top_altas = CorrecaoN2.query.filter_by(deleted_at=None, criticidade="Alta").order_by(
+            CorrecaoN2.updated_at.desc()
+        ).limit(5).all()
+
+        return render_template(
+            "correcoes/list.html",
+            itens=itens,
+            busca=busca,
+            categoria=categoria,
+            criticidade=criticidade,
+            ordem=ordem,
+            categorias=categorias,
+            total_correcoes=total_correcoes,
+            alta_count=alta_count,
+            total_categorias=total_categorias,
+            total_acessos=total_acessos,
+            distribuicao_criticidade=distribuicao_criticidade,
+            distribuicao_categorias=distribuicao_categorias,
+            top_correcoes=top_correcoes,
+            top_altas=top_altas,
+            sparkline_total_correcoes=sparkline_total_correcoes,
+            sparkline_altas=sparkline_altas,
+            sparkline_categorias=sparkline_categorias,
+            sparkline_acessos=sparkline_acessos
+        )
 
     @app.route("/correcoes/novo", methods=["GET", "POST"])
     @admin_required
@@ -276,6 +434,27 @@ def register_routes(app):
     @app.route("/correcoes/<int:id>")
     def correcoes_ver(id):
         item = CorrecaoN2.query.filter_by(id=id, deleted_at=None).first_or_404()
+
+        item.acessos = (item.acessos or 0) + 1
+
+        hoje = datetime.utcnow().date()
+
+        acesso_dia = CorrecaoAcesso.query.filter_by(
+            correcao_id=item.id,
+            data_acesso=hoje
+        ).first()
+
+        if acesso_dia:
+            acesso_dia.quantidade = (acesso_dia.quantidade or 0) + 1
+        else:
+            db.session.add(CorrecaoAcesso(
+                correcao_id=item.id,
+                data_acesso=hoje,
+                quantidade=1
+            ))
+
+        db.session.commit()
+
         return render_template("correcoes/view.html", item=item)
 
     @app.route("/correcoes/<int:id>/editar", methods=["GET", "POST"])

@@ -119,3 +119,34 @@
 - Correção dos tooltips cortados.
 - Ajuste do overflow dos gráficos.
 - Correção da exibição da primeira e última barra dos sparklines.
+
+
+
+## v2.5.0 - 09/07/2026
+
+### Novo
+- Modernização completa do módulo Scripts SQL.
+- Modernização completa do módulo Correções N2.
+- Dashboard de métricas reais para ambos os módulos.
+- Histórico de acessos diário.
+- Sparklines reais nos cards KPI.
+- Tooltips informativos nos gráficos.
+- Contador automático de acessos.
+- Ranking de itens mais acessados.
+- Breadcrumb navegável em todas as telas.
+
+### Melhorias
+- Novo layout para criação de Scripts SQL.
+- Novo layout para visualização de Scripts SQL.
+- Novo layout para criação de Correções N2.
+- Novo layout para visualização de Correções N2.
+- Melhorias no editor SQL.
+- Melhorias de responsividade.
+- Melhorias no tema escuro.
+- Ajustes visuais nos cards, formulários e painéis.
+
+### Correções
+- Correção da contabilização de acessos.
+- Ajuste dos tooltips dos gráficos.
+- Correção dos KPIs.
+- Ajustes de layout e alinhamento.

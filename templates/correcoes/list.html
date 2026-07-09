@@ -1,47 +1,257 @@
-{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between">
-    <h3>Correções N2</h3>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('correcoes_novo')}}"><i
-            class="bi bi-plus"></i> Nova</a>{% endif %}
-</div>
-<form class="card p-3 my-3 row g-2">
-    <div class="col-md-4"><input class="form-control" name="busca" placeholder="Buscar"
-            value="{{request.args.get('busca','')}}"></div>
-    <div class="col-md-3"><select class="form-select" name="categoria">
-            <option value="">Todas categorias</option>{% for c in categorias %}<option {{'selected' if
-                request.args.get('categoria')==c}}>{{c}}</option>{% endfor %}
-        </select></div>
-    <div class="col-md-3"><select class="form-select" name="criticidade">
-            <option value="">Todas criticidades</option>{% for c in ['Baixa','Média','Alta'] %}<option {{'selected' if
-                request.args.get('criticidade')==c}}>{{c}}</option>{% endfor %}
-        </select></div>
-    <div class="col-md-2"><button class="btn btn-secondary w-100">Filtrar</button></div>
-</form>{% if is_admin %}<div class="mb-3 d-flex gap-2"><a class="btn btn-outline-success"
-        href="{{url_for('correcoes_exportar')}}">Exportar JSON</a>
-    <form action="{{url_for('correcoes_importar')}}" method="post" enctype="multipart/form-data" class="d-flex gap-2">
-        <input class="form-control" type="file" name="arquivo" accept=".json" required><button
-            class="btn btn-outline-primary">Importar JSON</button></form>
-</div>{% endif %}<div class="card">
-    <table class="table table-hover mb-0">
-        <thead>
-            <tr>
-                <th>Título</th>
-                <th>Sistema</th>
-                <th>Categoria</th>
-                <th>Criticidade</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>{% for i in itens %}<tr>
-                <td>
-                    <a href="{{ url_for('correcoes_editar', id=i.id) }}" class="table-link">
-                        {{i.titulo}}
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="correcoes-modern-page">
+
+    <div class="correcoes-hero">
+        <div class="correcoes-title-row">
+            <div class="correcoes-title-icon">
+                <i class="bi bi-tools"></i>
+            </div>
+            <div>
+                <h3>Correções N2</h3>
+                <p>Gerencie as correções, causas e soluções utilizadas pela equipe N2.</p>
+            </div>
+        </div>
+
+        {% if is_admin %}
+        <a class="btn btn-primary correcoes-new-btn" href="{{ url_for('correcoes_novo') }}">
+            <i class="bi bi-plus-lg"></i>
+            Nova Correção
+        </a>
+        {% endif %}
+    </div>
+
+    <form method="get" class="correcoes-filter-bar">
+        <div class="correcoes-search">
+            <i class="bi bi-search"></i>
+            <input
+                id="pesquisaCorrecoes"
+                type="text"
+                name="busca"
+                value="{{ busca or '' }}"
+                placeholder="Buscar por título, sistema, categoria, erro ou solução...">
+        </div>
+
+        <select name="categoria" class="form-select">
+            <option value="">Todas categorias</option>
+            {% for c in categorias %}
+                <option value="{{ c }}" {% if categoria == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="criticidade" class="form-select">
+            <option value="">Todas criticidades</option>
+            {% for c in ['Baixa','Média','Alta'] %}
+                <option value="{{ c }}" {% if criticidade == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="ordem" class="form-select">
+            <option value="recentes" {% if ordem == 'recentes' %}selected{% endif %}>Mais recentes</option>
+            <option value="az" {% if ordem == 'az' %}selected{% endif %}>A-Z</option>
+            <option value="za" {% if ordem == 'za' %}selected{% endif %}>Z-A</option>
+            <option value="criticidade" {% if ordem == 'criticidade' %}selected{% endif %}>Por criticidade</option>
+            <option value="acessos" {% if ordem == 'acessos' %}selected{% endif %}>Mais acessadas</option>
+        </select>
+
+        <button class="btn btn-outline-primary correcoes-filter-btn">
+            <i class="bi bi-funnel"></i>
+            Filtrar
+        </button>
+    </form>
+
+    {% if is_admin %}
+    <div class="correcoes-admin-actions">
+        <a class="btn btn-outline-success" href="{{ url_for('correcoes_exportar') }}">
+            <i class="bi bi-download"></i>
+            Exportar JSON
+        </a>
+        <form action="{{ url_for('correcoes_importar') }}" method="post" enctype="multipart/form-data" class="correcoes-import-form">
+            <input class="form-control" type="file" name="arquivo" accept=".json" required>
+            <button class="btn btn-outline-primary">
+                <i class="bi bi-upload"></i>
+                Importar JSON
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    <div class="correcoes-layout">
+        <div class="correcoes-main">
+
+            <div class="correcoes-kpi-grid">
+                <div class="correcoes-kpi-card kpi-purple has-real-sparkline">
+                    <div class="correcoes-kpi-icon"><i class="bi bi-tools"></i></div>
+                    <div>
+                        <span>Total Correções</span>
+                        <h2>{{ total_correcoes }}</h2>
+                        <p>Todas as correções cadastradas</p>
+                    </div>
+                    <div class="real-sparkline">
+                        {% set maior = sparkline_total_correcoes|max if sparkline_total_correcoes else 1 %}
+                        {% for valor in sparkline_total_correcoes %}
+                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                            <span data-tooltip="{{ valor }} correção{{ 'es' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="correcoes-kpi-card kpi-red has-real-sparkline">
+                    <div class="correcoes-kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+                    <div>
+                        <span>Alta criticidade</span>
+                        <h2>{{ alta_count }}</h2>
+                        <p>Correções classificadas como alta</p>
+                    </div>
+                    <div class="real-sparkline">
+                        {% set maior = sparkline_altas|max if sparkline_altas else 1 %}
+                        {% for valor in sparkline_altas %}
+                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                            <span data-tooltip="{{ valor }} alta{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="correcoes-kpi-card kpi-green has-real-sparkline">
+                    <div class="correcoes-kpi-icon"><i class="bi bi-tags"></i></div>
+                    <div>
+                        <span>Categorias</span>
+                        <h2>{{ total_categorias }}</h2>
+                        <p>Categorias cadastradas</p>
+                    </div>
+                    <div class="real-sparkline">
+                        {% set maior = sparkline_categorias|max if sparkline_categorias else 1 %}
+                        {% for valor in sparkline_categorias %}
+                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                            <span data-tooltip="{{ valor }} categoria{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="correcoes-kpi-card kpi-orange has-real-sparkline">
+                    <div class="correcoes-kpi-icon"><i class="bi bi-eye"></i></div>
+                    <div>
+                        <span>Acessos</span>
+                        <h2>{{ total_acessos or 0 }}</h2>
+                        <p>Total de visualizações</p>
+                    </div>
+                    <div class="real-sparkline">
+                        {% set maior = sparkline_acessos|max if sparkline_acessos else 1 %}
+                        {% for valor in sparkline_acessos %}
+                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                            <span data-tooltip="{{ valor }} acesso{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="correcoes-card-grid">
+                {% for i in itens %}
+                <article class="correcao-card" data-criticidade="{{ i.criticidade }}">
+                    <div class="correcao-card-header">
+                        <div class="correcao-file-icon">
+                            <i class="bi bi-wrench-adjustable"></i>
+                        </div>
+
+                        <div class="correcao-card-title">
+                            <a href="{{ url_for('correcoes_ver', id=i.id) }}">{{ i.titulo }}</a>
+                            <p>{{ (i.erro or i.causa or i.correcao or 'Sem descrição cadastrada.')|striptags|truncate(110) }}</p>
+                        </div>
+
+                        <span class="criticidade-badge criticidade-{{ (i.criticidade or 'baixa')|lower|replace('é','e') }}">
+                            <i class="bi bi-flag"></i>
+                            {{ i.criticidade or 'Baixa' }}
+                        </span>
+                    </div>
+
+                    <div class="correcao-card-metrics">
+                        <span><i class="bi bi-pc-display"></i> {{ i.sistema or 'Sem sistema' }}</span>
+                        <span><i class="bi bi-tag"></i> {{ i.categoria or 'Sem categoria' }}</span>
+                        <span><i class="bi bi-eye"></i> {{ i.acessos or 0 }} acesso{{ 's' if (i.acessos or 0) != 1 else '' }}</span>
+                    </div>
+
+                    <div class="correcao-card-footer">
+                        <div class="correcao-card-dates">
+                            <span><i class="bi bi-calendar3"></i> Criado em<br><strong>{{ i.created_at.strftime('%d/%m/%Y') if i.created_at else '-' }}</strong></span>
+                            <span><i class="bi bi-arrow-repeat"></i> Atualizado em<br><strong>{{ i.updated_at.strftime('%d/%m/%Y') if i.updated_at else '-' }}</strong></span>
+                        </div>
+
+                        <div class="correcao-card-actions">
+                            <a class="btn btn-primary btn-sm" href="{{ url_for('correcoes_ver', id=i.id) }}">Abrir</a>
+                            {% if is_admin %}
+                            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('correcoes_editar', id=i.id) }}">Editar</a>
+                            <form method="post" action="{{ url_for('correcoes_excluir', id=i.id) }}" onsubmit="return confirm('Deseja excluir esta correção?')">
+                                <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i></button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </article>
+                {% else %}
+                <div class="correcoes-empty">
+                    <i class="bi bi-search"></i>
+                    <h5>Nenhuma correção encontrada</h5>
+                    <p>Altere os filtros ou cadastre uma nova correção.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <aside class="correcoes-side">
+            <div class="correcoes-side-card">
+                <div class="correcoes-side-header"><h6>Distribuição por criticidade</h6></div>
+                <div class="correcoes-distribution">
+                    {% for c in distribuicao_criticidade %}
+                    <div><span>{{ c.nome }}</span><strong>{{ c.percentual }}%</strong></div>
+                    <div class="progress correcoes-progress"><div class="progress-bar" style="width: {{ c.percentual }}%"></div></div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="correcoes-side-card">
+                <div class="correcoes-side-header"><h6><i class="bi bi-trophy text-warning"></i> Correção mais acessada</h6></div>
+                {% if top_correcoes %}
+                {% set top = top_correcoes[0] %}
+                <div class="top-correcao-box">
+                    <a href="{{ url_for('correcoes_ver', id=top.id) }}">{{ top.titulo }}</a>
+                    <span><i class="bi bi-eye"></i> {{ top.acessos or 0 }} acesso{{ 's' if (top.acessos or 0) != 1 else '' }}</span>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Nenhuma correção cadastrada.</p>
+                {% endif %}
+            </div>
+
+            <div class="correcoes-side-card">
+                <div class="correcoes-side-header"><h6>Correções mais acessadas</h6></div>
+                <div class="top-list">
+                    {% for c in top_correcoes %}
+                    <a href="{{ url_for('correcoes_ver', id=c.id) }}">
+                        <span class="rank">{{ loop.index }}</span>
+                        <span>{{ c.titulo }}</span>
+                        <strong>{{ c.acessos or 0 }}</strong>
                     </a>
-                </td>
-                <td>{{i.sistema}}</td>
-                <td>{{i.categoria}}</td>
-                <td><span
-                        class="badge bg-{{'danger' if i.criticidade=='Alta' else 'warning' if i.criticidade=='Média' else 'success'}}">{{i.criticidade}}</span>
-                </td>
-                <td><a class="btn btn-sm btn-outline-primary" href="{{url_for('correcoes_ver',id=i.id)}}">Abrir</a></td>
-            </tr>{% endfor %}</tbody>
-    </table>
-</div>{% endblock %}
+                    {% else %}
+                    <p class="text-muted mb-0">Nenhuma correção cadastrada.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="correcoes-side-card">
+                <div class="correcoes-side-header"><h6>Últimas altas</h6></div>
+                <div class="top-list">
+                    {% for c in top_altas %}
+                    <a href="{{ url_for('correcoes_ver', id=c.id) }}">
+                        <span class="rank danger">{{ loop.index }}</span>
+                        <span>{{ c.titulo }}</span>
+                        <strong>Alta</strong>
+                    </a>
+                    {% else %}
+                    <p class="text-muted mb-0">Nenhuma correção alta cadastrada.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+{% endblock %}

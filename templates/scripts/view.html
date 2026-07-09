@@ -1,22 +1,162 @@
-{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between">
-    <h3>{{item.titulo}}</h3>
-    <div>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('scripts_editar',id=item.id)}}">Editar</a>
-        <form class="d-inline" method="post" action="{{url_for('scripts_excluir',id=item.id)}}"><button
-                class="btn btn-danger">Excluir</button></form>{% endif %}
-    </div>
-</div>
-<div class="card p-3">
-    <p><b>Banco:</b> {{item.tipo_banco}}</p>
-    <h5>Descrição</h5>
-    <p>{{item.descricao}}</p>
-    <h5>Observações</h5>
-    <p>{{item.observacoes}}</p><button class="btn btn-outline-secondary mb-3"
-        onclick="navigator.clipboard.writeText(Array.from(document.querySelectorAll('.sql-code')).map(e=>e.innerText).join('\n\n'))">Copiar
-        todos</button>{% for c in item.consultas|sort(attribute='ordem') %}<div class="mb-3">
-        <div class="d-flex justify-content-between">
-            <h5>{{c.titulo_consulta}}</h5><button class="btn btn-sm btn-outline-primary"
-                onclick="copiarTexto('sql{{c.id}}')">Copiar</button>
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="script-view-page">
+
+    <div class="script-view-hero">
+        <div>
+            <div class="script-view-eyebrow">
+                <i class="bi bi-file-earmark-code"></i>
+                Script SQL
+            </div>
+
+            <h3>{{ item.titulo }}</h3>
+            <p>{{ item.descricao or 'Sem descrição cadastrada.' }}</p>
         </div>
-        <pre id="sql{{c.id}}" class="pre-sql sql-code">{{c.codigo_sql}}</pre>
-    </div>{% endfor %}
-</div>{% endblock %}
+
+        <div class="script-view-actions">
+            <span class="bank-badge
+                {% if 'SQL Server' in item.tipo_banco or item.tipo_banco == 'SQL' %}bank-sqlserver
+                {% elif 'MySQL' in item.tipo_banco %}bank-mysql
+                {% elif 'PostgreSQL' in item.tipo_banco %}bank-postgres
+                {% elif 'Access' in item.tipo_banco %}bank-access
+                {% elif 'Oracle' in item.tipo_banco %}bank-oracle
+                {% elif 'SQLite' in item.tipo_banco %}bank-sqlite
+                {% elif 'Firebird' in item.tipo_banco %}bank-firebird
+                {% endif %}">
+                <i class="bi bi-database"></i>
+                {{ item.tipo_banco }}
+            </span>
+
+            <button class="btn btn-outline-success" type="button"
+                onclick="copiarTodosScriptsView()">
+                <i class="bi bi-clipboard-check"></i>
+                Copiar todos
+            </button>
+
+            {% if is_admin %}
+            <a class="btn btn-primary" href="{{ url_for('scripts_editar', id=item.id) }}">
+                <i class="bi bi-pencil"></i>
+                Editar
+            </a>
+
+            <form class="d-inline" method="post" action="{{ url_for('scripts_excluir', id=item.id) }}" onsubmit="return confirm('Deseja excluir este script?')">
+                <button class="btn btn-danger">
+                    <i class="bi bi-trash"></i>
+                    Excluir
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="script-view-stats">
+        <div>
+            <span>Banco</span>
+            <strong>{{ item.tipo_banco or '-' }}</strong>
+        </div>
+
+        <div>
+            <span>Consultas</span>
+            <strong>{{ item.consultas|length }}</strong>
+        </div>
+
+        <div>
+            <span>Acessos</span>
+            <strong>{{ item.acessos or 0 }}</strong>
+        </div>
+
+        <div>
+            <span>Atualizado</span>
+            <strong>{{ item.updated_at.strftime('%d/%m/%Y') if item.updated_at else '-' }}</strong>
+        </div>
+    </div>
+
+    <div class="script-view-grid">
+        <section class="script-content-card">
+            <div class="section-title">
+                <i class="bi bi-card-text"></i>
+                <h5>Descrição</h5>
+            </div>
+            <p class="script-text">{{ item.descricao or 'Sem descrição cadastrada.' }}</p>
+        </section>
+
+        <section class="script-content-card">
+            <div class="section-title">
+                <i class="bi bi-info-circle"></i>
+                <h5>Observações</h5>
+            </div>
+            <p class="script-text">{{ item.observacoes or 'Sem observações cadastradas.' }}</p>
+        </section>
+    </div>
+
+    <div class="script-queries-header">
+        <div class="section-title mb-0">
+            <i class="bi bi-code-square"></i>
+            <h5>Consultas vinculadas</h5>
+        </div>
+
+        <span>{{ item.consultas|length }} consulta{{ 's' if item.consultas|length != 1 else '' }}</span>
+    </div>
+
+    <div class="script-query-list">
+        {% for c in item.consultas|sort(attribute='ordem') %}
+        <section class="script-query-view-card">
+            <div class="script-query-view-header">
+                <div>
+                    <div class="script-query-eyebrow">
+                        <i class="bi bi-terminal"></i>
+                        Consulta {{ loop.index }}
+                    </div>
+                    <h5>{{ c.titulo_consulta }}</h5>
+                </div>
+
+                <button class="btn btn-sm btn-outline-primary" type="button" onclick="copiarTexto('sql{{ c.id }}', this)">
+                    <i class="bi bi-clipboard"></i>
+                    Copiar
+                </button>
+            </div>
+
+            <pre id="sql{{ c.id }}" class="pre-sql sql-code">{{ c.codigo_sql }}</pre>
+        </section>
+        {% else %}
+        <section class="script-content-card">
+            <div class="scripts-empty">
+                <i class="bi bi-search"></i>
+                <h5>Nenhuma consulta cadastrada</h5>
+                <p>Edite este script para adicionar consultas SQL.</p>
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+
+</div>
+
+<script>
+function copiarTexto(id, btn) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    navigator.clipboard.writeText(el.innerText || el.textContent || "");
+
+    if (btn) {
+        const original = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2"></i> Copiado';
+        setTimeout(() => btn.innerHTML = original, 1400);
+    }
+}
+
+function copiarTodosScriptsView() {
+    const textos = Array.from(document.querySelectorAll(".sql-code"))
+        .map(e => e.innerText || e.textContent || "")
+        .join("\n\n");
+
+    navigator.clipboard.writeText(textos);
+
+    const btn = event.currentTarget;
+    const original = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check2"></i> Copiado';
+    setTimeout(() => btn.innerHTML = original, 1400);
+}
+</script>
+{% endblock %}

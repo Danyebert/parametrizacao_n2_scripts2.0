@@ -1,20 +1,75 @@
-{% extends 'base.html' %}{% block content %}<div class="d-flex justify-content-between">
-    <h3>{{item.titulo}}</h3>
-    <div>{% if is_admin %}<a class="btn btn-primary" href="{{url_for('correcoes_editar',id=item.id)}}">Editar</a>
-        <form class="d-inline" method="post" action="{{url_for('correcoes_excluir',id=item.id)}}"><button
-                class="btn btn-danger">Excluir</button></form>{% endif %}
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="correcao-view-page">
+    <div class="correcao-view-hero">
+        <div>
+            <div class="correcao-view-eyebrow">
+                <i class="bi bi-tools"></i>
+                Correção N2
+            </div>
+            <h3>{{ item.titulo }}</h3>
+            <p>{{ item.sistema or 'Sem sistema' }} • {{ item.categoria or 'Sem categoria' }}</p>
+        </div>
+
+        <div class="correcao-view-actions">
+            <span class="criticidade-badge criticidade-{{ (item.criticidade or 'baixa')|lower|replace('é','e') }}">
+                <i class="bi bi-flag"></i>
+                {{ item.criticidade or 'Baixa' }}
+            </span>
+            {% if is_admin %}
+            <a class="btn btn-primary" href="{{ url_for('correcoes_editar', id=item.id) }}">
+                <i class="bi bi-pencil"></i>
+                Editar
+            </a>
+            <form class="d-inline" method="post" action="{{ url_for('correcoes_excluir', id=item.id) }}" onsubmit="return confirm('Deseja excluir esta correção?')">
+                <button class="btn btn-danger">
+                    <i class="bi bi-trash"></i>
+                    Excluir
+                </button>
+            </form>
+            {% endif %}
+        </div>
     </div>
+
+    <div class="correcao-view-stats">
+        <div><span>Sistema</span><strong>{{ item.sistema or '-' }}</strong></div>
+        <div><span>Categoria</span><strong>{{ item.categoria or '-' }}</strong></div>
+        <div><span>Acessos</span><strong>{{ item.acessos or 0 }}</strong></div>
+        <div><span>Atualizado</span><strong>{{ item.updated_at.strftime('%d/%m/%Y') if item.updated_at else '-' }}</strong></div>
+    </div>
+
+    <div class="correcao-view-grid">
+        <section class="correcao-content-card">
+            <div class="section-title"><i class="bi bi-bug"></i><h5>Erro apresentado</h5></div>
+            <pre class="pre-sql">{{ item.erro or 'Não informado.' }}</pre>
+        </section>
+
+        <section class="correcao-content-card">
+            <div class="section-title"><i class="bi bi-search"></i><h5>Causa provável</h5></div>
+            <p class="correcao-text">{{ item.causa or 'Não informado.' }}</p>
+        </section>
+
+        <section class="correcao-content-card full">
+            <div class="section-title"><i class="bi bi-check2-circle"></i><h5>Correção aplicada</h5></div>
+            <pre class="pre-sql">{{ item.correcao or 'Não informado.' }}</pre>
+        </section>
+    </div>
+
+    {% set anexos_ativos = item.anexos|selectattr('deleted_at', 'none')|list %}
+    {% if anexos_ativos %}
+    <section class="correcao-content-card mt-3">
+        <div class="section-title"><i class="bi bi-paperclip"></i><h5>Anexos</h5></div>
+        <div class="row g-3">
+            {% for a in anexos_ativos %}
+            <div class="col-md-3">
+                <a href="{{ url_for('anexo_ver', id=a.id) }}" target="_blank">
+                    <img class="img-fluid thumb" src="{{ url_for('anexo_ver', id=a.id) }}">
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
 </div>
-<div class="card p-3">
-    <p><b>Sistema:</b> {{item.sistema}} | <b>Categoria:</b> {{item.categoria}} | <b>Criticidade:</b>
-        {{item.criticidade}}</p>
-    <h5>Erro apresentado</h5>
-    <pre class="pre-sql">{{item.erro}}</pre>
-    <h5>Causa provável</h5>
-    <p>{{item.causa}}</p>
-    <h5>Correção aplicada</h5>
-    <pre class="pre-sql">{{item.correcao}}</pre>
-    <div class="row g-3">{% for a in item.anexos if not a.deleted_at %}<div class="col-md-3"><a
-                href="{{url_for('anexo_ver',id=a.id)}}" target="_blank"><img class="img-fluid thumb"
-                    src="{{url_for('anexo_ver',id=a.id)}}"></a></div>{% endfor %}</div>
-</div>{% endblock %}
+{% endblock %}
