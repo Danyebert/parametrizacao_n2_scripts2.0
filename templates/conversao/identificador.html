@@ -2,95 +2,289 @@
 
 {% block content %}
 <div class="identificador-page" id="identificadorApp">
+
     <div class="identificador-hero">
         <div class="identificador-title-row">
-            <div class="identificador-title-icon"><i class="bi bi-upc-scan"></i></div>
+            <div class="identificador-title-icon">
+                <i class="bi bi-upc-scan"></i>
+            </div>
+
             <div>
                 <h3>Gerador de Identificador</h3>
-                <p>Extraia o código e gere um identificador padronizado a partir da linha do cliente.</p>
+                <p>
+                    Extraia o código e gere um identificador padronizado
+                    a partir da linha do cliente.
+                </p>
             </div>
         </div>
-        <button class="btn btn-primary identificador-generate-top" type="button" data-action="gerar-identificador">
-            <i class="bi bi-stars"></i> Gerar identificador
+
+        <button
+            class="btn btn-primary identificador-generate-top"
+            type="button"
+            onclick="gerarIdentificador()"
+        >
+            <i class="bi bi-stars"></i>
+            Gerar identificador
         </button>
     </div>
 
     <div class="identificador-kpi-grid">
+
         <div class="identificador-kpi-card kpi-purple">
-            <div class="identificador-kpi-icon"><i class="bi bi-magic"></i></div>
-            <div><span>Gerados na sessão</span><h2 id="identificadorGerados">0</h2><p>Resultados desta página</p></div>
+            <div class="identificador-kpi-icon">
+                <i class="bi bi-magic"></i>
+            </div>
+
+            <div>
+                <span>Gerados na sessão</span>
+                <h2 id="metricTotalGerados">0</h2>
+                <p>Resultados desta página</p>
+            </div>
         </div>
+
         <div class="identificador-kpi-card kpi-blue">
-            <div class="identificador-kpi-icon"><i class="bi bi-clock-history"></i></div>
-            <div><span>Histórico salvo</span><h2 id="identificadorHistoricoTotal">0</h2><p>Itens no navegador</p></div>
+            <div class="identificador-kpi-icon">
+                <i class="bi bi-clock-history"></i>
+            </div>
+
+            <div>
+                <span>Histórico salvo</span>
+                <h2 id="metricHistorico">0</h2>
+                <p>Itens no navegador</p>
+            </div>
         </div>
+
         <div class="identificador-kpi-card kpi-green">
-            <div class="identificador-kpi-icon"><i class="bi bi-check2-circle"></i></div>
-            <div><span>Último número</span><h2 id="identificadorUltimoNumero">—</h2><p>Último código extraído</p></div>
+            <div class="identificador-kpi-icon">
+                <i class="bi bi-check2-circle"></i>
+            </div>
+
+            <div>
+                <span>Último identificador</span>
+                <h2 id="metricUltimo">Nenhum</h2>
+                <p>Último item gerado</p>
+            </div>
         </div>
+
         <div class="identificador-kpi-card kpi-orange">
-            <div class="identificador-kpi-icon"><i class="bi bi-type"></i></div>
-            <div><span>Caracteres</span><h2 id="identificadorCaracteres">0</h2><p>Na entrada atual</p></div>
+            <div class="identificador-kpi-icon">
+                <i class="bi bi-type"></i>
+            </div>
+
+            <div>
+                <span>Caracteres</span>
+                <h2 id="contadorCaracteresIdentificador">0</h2>
+                <p>Na entrada atual</p>
+            </div>
         </div>
     </div>
 
     <div class="identificador-layout">
+
         <main class="identificador-main">
+
             <section class="identificador-card">
                 <div class="identificador-card-header">
-                    <div><span class="identificador-eyebrow"><i class="bi bi-input-cursor-text"></i> Entrada</span><h5>Cole a linha do cliente</h5></div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-action="limpar-entrada"><i class="bi bi-eraser"></i> Limpar</button>
+
+                    <div>
+                        <span class="identificador-eyebrow">
+                            <i class="bi bi-input-cursor-text"></i>
+                            Entrada
+                        </span>
+
+                        <h5>Cole a linha do cliente</h5>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary"
+                        onclick="limparFormularioIdentificador()"
+                    >
+                        <i class="bi bi-eraser"></i>
+                        Limpar
+                    </button>
                 </div>
-                <textarea id="linhaIdentificador" class="form-control identificador-textarea" rows="6" placeholder="Ex.: 05/26 - 72051 - CLIENTE EXEMPLO - CIDADE"></textarea>
+
+                <textarea
+                    id="linhaIdentificador"
+                    class="form-control identificador-textarea"
+                    rows="6"
+                    placeholder="Ex.: 05/26 - 72051 - CLIENTE EXEMPLO - CIDADE"
+                ></textarea>
+
                 <div class="identificador-help">
-                    <span><i class="bi bi-info-circle"></i> Aceita hífen, ponto e vírgula e linhas separadas.</span>
-                    <span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> para gerar</span>
+                    <span>
+                        <i class="bi bi-info-circle"></i>
+                        Aceita hífen, ponto e vírgula e linhas separadas.
+                    </span>
+
+                    <span>
+                        <kbd>Ctrl</kbd> + <kbd>Enter</kbd> para gerar
+                    </span>
                 </div>
-                <div id="identificadorAlerta" class="alert d-none mt-3 mb-0" role="alert"></div>
-                <button type="button" class="btn btn-primary identificador-main-button" data-action="gerar-identificador">
-                    <span class="normal-label"><i class="bi bi-stars"></i> Gerar identificador</span>
-                    <span class="loading-label d-none"><span class="spinner-border spinner-border-sm"></span> Gerando...</span>
+
+                <button
+                    type="button"
+                    id="btnGerarIdentificador"
+                    class="btn btn-primary identificador-main-button"
+                    onclick="gerarIdentificador()"
+                >
+                    <i class="bi bi-stars"></i>
+                    Gerar identificador
                 </button>
             </section>
 
             <section class="identificador-card resultado-card">
                 <div class="identificador-card-header">
-                    <div><span class="identificador-eyebrow"><i class="bi bi-check2-square"></i> Resultado</span><h5>Dados gerados</h5></div>
-                    <button type="button" class="btn btn-sm btn-outline-success" data-action="copiar-tudo"><i class="bi bi-copy"></i> Copiar tudo</button>
-                </div>
-                <div class="identificador-result-grid">
-                    <div class="identificador-result-field">
-                        <label for="numeroIdentificador">Número</label>
-                        <div class="input-group"><input id="numeroIdentificador" class="form-control" readonly placeholder="—"><button class="btn btn-outline-secondary" type="button" data-copy-target="numeroIdentificador"><i class="bi bi-clipboard"></i></button></div>
+
+                    <div>
+                        <span class="identificador-eyebrow">
+                            <i class="bi bi-check2-square"></i>
+                            Resultado
+                        </span>
+
+                        <h5>Dados gerados</h5>
                     </div>
+
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline-success"
+                        onclick="copiarAmbosIdentificador()"
+                    >
+                        <i class="bi bi-copy"></i>
+                        Copiar tudo
+                    </button>
+                </div>
+
+                <div class="identificador-result-grid">
+
                     <div class="identificador-result-field">
-                        <label for="resultadoIdentificador">Identificador</label>
-                        <div class="input-group"><input id="resultadoIdentificador" class="form-control" readonly placeholder="—"><button class="btn btn-outline-secondary" type="button" data-copy-target="resultadoIdentificador"><i class="bi bi-clipboard"></i></button></div>
+                        <label for="numeroIdentificador">
+                            Número
+                        </label>
+
+                        <div class="input-group">
+                            <input
+                                id="numeroIdentificador"
+                                class="form-control"
+                                readonly
+                                placeholder="—"
+                            >
+
+                            <button
+                                class="btn btn-outline-secondary"
+                                type="button"
+                                onclick="copiarNumeroIdentificador()"
+                                title="Copiar número"
+                            >
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="identificador-result-field">
+                        <label for="resultadoIdentificador">
+                            Identificador
+                        </label>
+
+                        <div class="input-group">
+                            <input
+                                id="resultadoIdentificador"
+                                class="form-control"
+                                readonly
+                                placeholder="—"
+                            >
+
+                            <button
+                                class="btn btn-outline-secondary"
+                                type="button"
+                                onclick="copiarResultadoIdentificador()"
+                                title="Copiar identificador"
+                            >
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
         </main>
 
         <aside class="identificador-side">
+
             <section class="identificador-card historico-card">
                 <div class="identificador-card-header">
-                    <div><span class="identificador-eyebrow"><i class="bi bi-clock-history"></i> Histórico</span><h5>Últimos identificadores</h5></div>
+
+                    <div>
+                        <span class="identificador-eyebrow">
+                            <i class="bi bi-clock-history"></i>
+                            Histórico
+                        </span>
+
+                        <h5>Últimos identificadores</h5>
+                    </div>
                 </div>
+
                 <div class="identificador-history-actions">
-                    <button type="button" class="btn btn-sm btn-outline-success" data-action="exportar-historico"><i class="bi bi-file-earmark-text"></i> Exportar TXT</button>
-                    <button type="button" class="btn btn-sm btn-outline-danger" data-action="limpar-historico"><i class="bi bi-trash"></i> Limpar</button>
+
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline-success"
+                        onclick="exportarHistoricoIdentificador()"
+                    >
+                        <i class="bi bi-file-earmark-text"></i>
+                        Exportar TXT
+                    </button>
+
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline-danger"
+                        onclick="limparHistoricoIdentificador()"
+                    >
+                        <i class="bi bi-trash"></i>
+                        Limpar
+                    </button>
                 </div>
-                <div id="historicoIdentificador" class="identificador-history-list"></div>
+
+                <div
+                    id="historicoIdentificadores"
+                    class="identificador-history-list"
+                ></div>
             </section>
 
             <section class="identificador-card exemplo-card">
-                <div class="identificador-card-header"><div><span class="identificador-eyebrow"><i class="bi bi-lightbulb"></i> Exemplo</span><h5>Formato sugerido</h5></div></div>
-                <code>05/26 - 72051 - CLIENTE EXEMPLO - CIDADE</code>
-                <p>Resultado: <strong>72051</strong> e <strong>clienteexemplocidade</strong>.</p>
+                <div class="identificador-card-header">
+
+                    <div>
+                        <span class="identificador-eyebrow">
+                            <i class="bi bi-lightbulb"></i>
+                            Exemplo
+                        </span>
+
+                        <h5>Formato sugerido</h5>
+                    </div>
+                </div>
+
+                <code>
+                    05/26 - 72051 - CLIENTE EXEMPLO - CIDADE
+                </code>
+
+                <p>
+                    Resultado:
+                    <strong>72051</strong>
+                    e
+                    <strong>clienteexemplocidade</strong>.
+                </p>
             </section>
         </aside>
     </div>
 
-    <div class="identificador-toast" id="identificadorToast" role="status"><i class="bi bi-check-circle"></i><span>Copiado!</span></div>
+    <div
+        class="identificador-toast"
+        id="identificadorToast"
+        role="status"
+    >
+        <i class="bi bi-check-circle"></i>
+        <span>Copiado!</span>
+    </div>
 </div>
 {% endblock %}

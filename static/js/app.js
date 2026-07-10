@@ -375,17 +375,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document
         .getElementById("pesquisaScripts")
-        ?.addEventListener(
-            "keyup",
-            pesquisarScripts
-        );
+        ?.addEventListener("keyup", pesquisarScripts);
 
     document
         .getElementById("filtroBanco")
-        ?.addEventListener(
-            "change",
-            filtrarBanco
-        );
+        ?.addEventListener("change", filtrarBanco);
 
 });
 
