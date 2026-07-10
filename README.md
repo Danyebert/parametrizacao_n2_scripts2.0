@@ -1,97 +1,293 @@
-# Parametrização N2 Scripts
+# 🚀 Parametrização N2
 
-Sistema web interno para centralizar documentação técnica da equipe N2: correções, scripts SQL, bancos mapeados, downloads do DataSync, ferramentas de conversão e gerador de identificador.
+Central interna para documentação técnica, scripts SQL, correções N2, DataSync e ferramentas de apoio à equipe de suporte.
 
-## Tecnologias
+![Python](https://img.shields.io/badge/Python-3.13-blue)
+![Flask](https://img.shields.io/badge/Flask-3.x-black)
+![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-purple)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.x-red)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-blue)
+![License](https://img.shields.io/badge/license-Private-red)
 
-- Python Flask
-- PostgreSQL, compatível com Neon e Supabase
+---
+
+# 📖 Sobre o projeto
+
+O **Parametrização N2** é uma plataforma web desenvolvida para centralizar todas as documentações técnicas da equipe N2 da Softcom.
+
+O objetivo é eliminar consultas espalhadas em arquivos, facilitar o compartilhamento de conhecimento e disponibilizar ferramentas utilizadas diariamente pela equipe.
+
+Hoje o sistema possui uma interface moderna, responsiva e compatível com tema claro e escuro.
+
+---
+
+# ✨ Funcionalidades
+
+## 📊 Dashboard
+
+- Métricas em tempo real
+- Quantidade de Scripts
+- Quantidade de Correções
+- Downloads DataSync
+- Últimos Scripts
+- Últimas Correções
+- Gráficos de utilização
+- Cards animados
+
+---
+
+## 💻 Scripts SQL
+
+- Cadastro de Scripts
+- Editor SQL (CodeMirror)
+- Destaque de Sintaxe
+- Formatação automática
+- Copiar SQL
+- Tela de visualização
+- Pesquisa
+- Filtros
+- Contagem de acessos
+- Estatísticas
+- Dashboard interno
+
+---
+
+## 🔧 Correções N2
+
+- Cadastro de Correções
+- Classificação por criticidade
+- Categorias
+- Editor SQL
+- Pesquisa
+- Histórico
+- Métricas
+- Contagem de acessos
+- Dashboard interno
+
+---
+
+## ☁️ DataSync
+
+Cadastro de ferramentas utilizadas pelo suporte.
+
+Cada ferramenta possui:
+
+- Nome
+- Tipo
+- Link para Download
+- Contador de Downloads
+
+O download é realizado através de links externos evitando o limite de upload da Vercel.
+
+---
+
+## 🆔 Gerador de Identificador
+
+Ferramenta para geração rápida de identificadores.
+
+Possui:
+
+- Histórico
+- Exportação TXT
+- Copiar Número
+- Copiar Identificador
+- Copiar Tudo
+- Atalho CTRL + ENTER
+- Histórico Local
+- Contadores
+
+---
+
+# 🖥️ Interface
+
+O sistema possui:
+
+- Tema Claro
+- Tema Escuro
+- Sidebar Responsiva
+- Breadcrumb
+- Cards Modernos
+- Dashboard
+- Sparkline Charts
+- Layout Responsivo
+
+---
+
+# 🛠️ Tecnologias
+
+Backend
+
+- Python
+- Flask
 - SQLAlchemy
+- Psycopg
+- PostgreSQL
+
+Frontend
+
 - Bootstrap 5
 - Bootstrap Icons
-- Jinja2
-- JavaScript
+- Chart.js
 - CodeMirror
-- Deploy compatível com Vercel
+- JavaScript
+- HTML5
+- CSS3
 
-## Funcionalidades
+Banco
 
-### Autenticação
+- PostgreSQL (Neon)
 
-- Usuário visitante visualiza dados.
-- Usuário administrador cria, edita, exclui, importa e exporta.
-- Admin padrão criado automaticamente caso não exista:
-  - usuário: `admin`
-  - senha: `admin123`
-- Altere a senha após o primeiro login.
+Hospedagem
 
-### Correções N2
+- Vercel
 
-- CRUD completo.
-- Busca por texto.
-- Filtros por categoria e criticidade.
-- Campos técnicos com CodeMirror.
-- Upload múltiplo de imagens JPG, JPEG e PNG salvo no banco.
-- Remoção lógica de correções e anexos.
-- Exportação JSON.
-- Importação JSON no formato atual e legado.
+---
 
-### Scripts SQL
+# 📂 Estrutura
 
-- CRUD completo.
-- Cadastro de script com múltiplas consultas vinculadas.
-- Editor SQL com CodeMirror.
-- Botão copiar por consulta.
-- Botão copiar todos.
+```
+app.py
 
-### Banco de Dados Mapeados
+models.py
 
-- Cadastro simples de bancos mapeados, tipo, descrição e observações.
+templates/
+│
+├── dashboard.html
+├── scripts/
+├── correcoes/
+├── datasync/
+└── conversao/
 
-### DataSync e Ferramentas de Conversão
+static/
+│
+├── css/
+├── js/
+└── img/
 
-- Lista arquivos/pastas locais em `local_files/datasync` e `local_files/conversao`.
-- Baixa arquivo direto.
-- Compacta pasta em ZIP quando necessário.
-- Se a pasta tiver apenas um `.zip`, `.rar` ou `.7z`, baixa o arquivo direto.
-- Upload de arquivos para PostgreSQL pelo usuário administrador.
-- Contador de downloads para arquivos armazenados no banco.
+instance/
 
-> Observação: no Vercel o sistema de arquivos é efêmero. Para produção, use a função de upload para banco ou um storage externo.
-
-### Gerador de Identificador
-
-Entrada de exemplo:
-
-```txt
-05/26 - 72051 - SILVANIO DIREÇÕES HIDRAULICAS - ARAPIRACA
+requirements.txt
+README.md
 ```
 
-Resultado:
+---
 
-- número: `72051`
-- identificador: `silvaniodirecoeshidraulicasarapiraca`
+# ⚙️ Instalação
 
-## Rodar localmente
+Clone o projeto
+
+```bash
+git clone https://github.com/Danyebert/parametrizacao_n2_scripts2.0.git
+```
+
+Entre na pasta
+
+```bash
+cd parametrizacao_n2_scripts2.0
+```
+
+Crie o ambiente virtual
+
+Windows
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-python app.py
 ```
 
-No Linux/WSL:
+Linux
 
 ```bash
 python3 -m venv .venv
+```
+
+Ative
+
+Windows
+
+```bash
+.venv\Scripts\activate
+```
+
+Linux
+
+```bash
 source .venv/bin/activate
+```
+
+Instale
+
+```bash
 pip install -r requirements.txt
-cp .env.example .env
-source .venv/bin/activate
-flask --app app.py run --host=0.0.0.0 --port=5000 --debug --no-reload
+```
+
+---
+
+# ▶️ Executar
+
+```bash
 python app.py
 ```
 
-Acesse: `http://127.0.0.1:5000`
+ou
+
+```bash
+flask run
+```
+
+---
+
+# 🌐 Deploy
+
+Projeto preparado para deploy na:
+
+- Vercel
+
+Banco:
+
+- PostgreSQL Neon
+
+---
+
+# 🔐 Variáveis de Ambiente
+
+```env
+DATABASE_URL=
+
+SECRET_KEY=
+```
+
+---
+
+## Próximas versões
+
+- Controle de usuários
+- Favoritos
+- Pesquisa Global
+- Logs de Auditoria
+- Dashboard Administrativo
+- Notificações
+- API REST
+
+---
+
+# 👨‍💻 Desenvolvedor
+
+**Danyebert Pereira**
+
+LinkedIn
+
+www.linkedin.com/in/danyebert-pereira-452a69136
+
+GitHub
+
+https://github.com/Danyebert
+
+---
+
+# 📄 Licença
+
+Projeto privado.
+
+Uso interno da Softcom.
+
+Todos os direitos reservados.
