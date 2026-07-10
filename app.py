@@ -8,6 +8,7 @@ from sqlalchemy import or_, func, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from sqlalchemy.exc import OperationalError
 
 load_dotenv()
 db = SQLAlchemy()
@@ -154,6 +155,14 @@ def create_app():
         db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+    "pool_timeout": 20,
+    "pool_size": 5,
+    "max_overflow": 5,
+        }
     app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
     db.init_app(app)
 
@@ -163,6 +172,9 @@ def create_app():
         create_default_admin()
 
     register_routes(app)
+    @app.teardown_appcontext
+    def shutdown_session(exception=None):
+        db.session.remove()
     return app
 
 
@@ -281,7 +293,7 @@ def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.7.1",
+                "APP_VERSION": "2.7.2",
                 "APP_BUILD": "2026-07-10",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
