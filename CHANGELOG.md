@@ -186,3 +186,21 @@
 - Gerador de Identificador.
 
 Todos os módulos principais agora seguem a mesma identidade visual.
+
+## v2.7.1 - 10/07/2026
+
+### Gerador de Identificador
+- Modernização completa da interface.
+- Novo layout seguindo o padrão do sistema.
+- Histórico persistente em LocalStorage.
+- KPIs em tempo real.
+- Contador de caracteres.
+- Copiar Número.
+- Copiar Identificador.
+- Copiar Tudo.
+- Exportação do histórico em TXT.
+- Limpeza do histórico.
+- Atalho Ctrl + Enter.
+- Correção da integração entre HTML e JavaScript.
+- Ajuste dos IDs e ações dos botões.
+- Correção das funções de cópia.
