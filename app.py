@@ -281,7 +281,7 @@ def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.7.0",
+                "APP_VERSION": "2.7.1",
                 "APP_BUILD": "2026-07-10",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
