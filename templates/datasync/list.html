@@ -1,74 +1,168 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-    <div>
-        <h3 class="mb-1">{{ titulo }}</h3>
-        <p class="text-muted mb-0">Cadastro de links para download.</p>
+<div class="datasync-modern-page">
+    <div class="datasync-hero">
+        <div class="datasync-title-row">
+            <div class="datasync-title-icon"><i class="bi bi-cloud-arrow-down"></i></div>
+            <div>
+                <h3>{{ titulo }}</h3>
+                <p>Gerencie ferramentas, links e métricas reais de downloads.</p>
+            </div>
+        </div>
+        {% if is_admin %}
+        <a href="{{ url_for('arquivo_novo', modulo=modulo) }}" class="btn btn-primary datasync-new-btn">
+            <i class="bi bi-plus-lg"></i> Nova Ferramenta
+        </a>
+        {% endif %}
     </div>
 
-    {% if is_admin %}
-    <a href="{{ url_for('arquivo_novo', modulo=modulo) }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> Novo Link
-    </a>
-    {% endif %}
-</div>
+    <form method="get" class="datasync-filter-bar">
+        <div class="datasync-search">
+            <i class="bi bi-search"></i>
+            <input type="text" name="busca" value="{{ busca or '' }}" placeholder="Buscar por nome ou tipo...">
+        </div>
+        <select name="tipo" class="form-select">
+            <option value="">Todos os tipos</option>
+            {% for t in tipos_disponiveis %}
+            <option value="{{ t }}" {% if tipo == t %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+        </select>
+        <select name="ordem" class="form-select">
+            <option value="recentes" {% if ordem == 'recentes' %}selected{% endif %}>Mais recentes</option>
+            <option value="downloads" {% if ordem == 'downloads' %}selected{% endif %}>Mais baixados</option>
+            <option value="az" {% if ordem == 'az' %}selected{% endif %}>A-Z</option>
+            <option value="za" {% if ordem == 'za' %}selected{% endif %}>Z-A</option>
+            <option value="tipo" {% if ordem == 'tipo' %}selected{% endif %}>Por tipo</option>
+        </select>
+        <button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrar</button>
+    </form>
 
-<div class="card">
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Nome da Ferramenta</th>
-                    <th>Tipo</th>
-                    <th>Contador</th>
-                    <th>Link para download</th>
-                    <th class="text-end">Ações</th>
-                </tr>
-            </thead>
-
-            <tbody>
-                {% for item in itens %}
-                <tr>
-                    <td>
-                        <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" class="table-link" target="_blank">
-                            {{ item.nome }}
-                        </a>
-                    </td>
-                    <td>{{ item.tipo }}</td>
-                    <td>{{ item.downloads or 0 }}</td>
-                    <td>
-                        <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" class="text-decoration-none" target="_blank">
-                            Abrir download
-                        </a>
-                    </td>
-                    <td class="text-end">
-                        <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" class="btn btn-outline-primary btn-sm" target="_blank">
-                            <i class="bi bi-download"></i> Baixar
-                        </a>
-
-                        {% if is_admin %}
-                        <a href="{{ url_for('arquivo_editar', modulo=modulo, id=item.id) }}" class="btn btn-outline-secondary btn-sm">
-                            <i class="bi bi-pencil"></i>
-                        </a>
-
-                        <form method="post" action="{{ url_for('arquivo_excluir', modulo=modulo, id=item.id) }}" class="d-inline">
-                            <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Deseja excluir este link?')">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </form>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="5" class="text-center text-muted py-4">
-                        Nenhum link cadastrado.
-                    </td>
-                </tr>
+    <div class="datasync-layout">
+        <div class="datasync-main">
+            <div class="datasync-kpi-grid">
+                {% set cards = [
+                    ('kpi-blue','bi-box-seam','Ferramentas',total_ferramentas,'Total cadastrado',sparkline_ferramentas,'ferramenta'),
+                    ('kpi-cyan','bi-download','Downloads',total_downloads,'Total de downloads',sparkline_downloads,'download'),
+                    ('kpi-green','bi-tags','Tipos',total_tipos,'Tipos de ferramentas',sparkline_tipos,'tipo')
+                ] %}
+                {% for classe, icone, rotulo, total, descricao, spark, singular in cards %}
+                <div class="datasync-kpi-card {{ classe }} has-real-sparkline">
+                    <div class="datasync-kpi-icon"><i class="bi {{ icone }}"></i></div>
+                    <div><span>{{ rotulo }}</span><h2>{{ total }}</h2><p>{{ descricao }}</p></div>
+                    <div class="real-sparkline">
+                        {% set maior = spark|max if spark else 1 %}
+                        {% for valor in spark %}
+                        {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                        <span data-tooltip="{{ valor }} {{ singular }}{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
+                        {% endfor %}
+                    </div>
+                </div>
                 {% endfor %}
-            </tbody>
-        </table>
+
+                <div class="datasync-kpi-card kpi-purple has-real-sparkline">
+                    <div class="datasync-kpi-icon"><i class="bi bi-trophy"></i></div>
+                    <div>
+                        <span>Mais baixada</span>
+                        <h2>{{ mais_baixada.downloads if mais_baixada else 0 }}</h2>
+                        <p>{{ mais_baixada.nome|truncate(28) if mais_baixada else 'Sem dados' }}</p>
+                    </div>
+                    <div class="real-sparkline">
+                        {% set maior = sparkline_top|max if sparkline_top else 1 %}
+                        {% for valor in sparkline_top %}
+                        {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
+                        <span data-tooltip="{{ valor }} download{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="datasync-card-grid">
+                {% for item in itens %}
+                <article class="datasync-card">
+                    <div class="datasync-card-header">
+                        <div class="datasync-file-icon"><i class="bi bi-box-seam"></i></div>
+                        <div class="datasync-card-title">
+                            <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" target="_blank">{{ item.nome }}</a>
+                            <p>Ferramenta disponível para download externo.</p>
+                        </div>
+                        <span class="datasync-type-badge"><i class="bi bi-tag"></i> {{ item.tipo }}</span>
+                    </div>
+
+                    <div class="datasync-card-metrics">
+                        <span><i class="bi bi-download"></i> {{ item.downloads or 0 }} download{{ 's' if (item.downloads or 0) != 1 else '' }}</span>
+                        <span><i class="bi bi-clock-history"></i> {{ item.updated_at.strftime('%d/%m/%Y') if item.updated_at else '-' }}</span>
+                    </div>
+
+                    <div class="datasync-card-footer">
+                        <div class="datasync-card-dates">
+                            <span><i class="bi bi-calendar3"></i> Criado em<br><strong>{{ item.created_at.strftime('%d/%m/%Y') if item.created_at else '-' }}</strong></span>
+                            <span><i class="bi bi-arrow-repeat"></i> Atualizado em<br><strong>{{ item.updated_at.strftime('%d/%m/%Y') if item.updated_at else '-' }}</strong></span>
+                        </div>
+                        <div class="datasync-card-actions">
+                            <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" class="btn btn-primary btn-sm" target="_blank"><i class="bi bi-download"></i> URL </a>
+                            {% if is_admin %}
+                            <a href="{{ url_for('arquivo_editar', modulo=modulo, id=item.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                            <form method="post" action="{{ url_for('arquivo_excluir', modulo=modulo, id=item.id) }}" onsubmit="return confirm('Deseja excluir este link?')">
+                                <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </article>
+                {% else %}
+                <div class="datasync-empty">
+                    <i class="bi bi-cloud-slash"></i>
+                    <h5>Nenhuma ferramenta encontrada</h5>
+                    <p>Altere os filtros ou cadastre uma nova ferramenta.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <aside class="datasync-side">
+            <div class="datasync-side-card">
+                <div class="datasync-side-header"><h6>Distribuição por tipo</h6></div>
+                <div class="datasync-distribution">
+                    {% for t in distribuicao_tipos %}
+                    <div><span>{{ t.nome }}</span><strong>{{ t.percentual }}%</strong></div>
+                    <div class="progress datasync-progress"><div class="progress-bar" style="width: {{ t.percentual }}%"></div></div>
+                    {% else %}<p class="text-muted mb-0">Sem dados para exibir.</p>{% endfor %}
+                </div>
+            </div>
+
+            <div class="datasync-side-card">
+                <div class="datasync-side-header"><h6><i class="bi bi-trophy text-warning"></i> Mais baixada</h6></div>
+                {% if mais_baixada %}
+                <div class="top-datasync-box">
+                    <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=mais_baixada.id) }}" target="_blank">{{ mais_baixada.nome }}</a>
+                    <span><i class="bi bi-download"></i> {{ mais_baixada.downloads or 0 }} downloads</span>
+                </div>
+                {% else %}<p class="text-muted mb-0">Nenhuma ferramenta cadastrada.</p>{% endif %}
+            </div>
+
+            <div class="datasync-side-card">
+                <div class="datasync-side-header"><h6>Mais baixadas</h6></div>
+                <div class="top-list">
+                    {% for item in top_downloads %}
+                    <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" target="_blank">
+                        <span class="rank">{{ loop.index }}</span><span>{{ item.nome }}</span><strong>{{ item.downloads or 0 }}</strong>
+                    </a>
+                    {% else %}<p class="text-muted mb-0">Nenhuma ferramenta cadastrada.</p>{% endfor %}
+                </div>
+            </div>
+
+            <div class="datasync-side-card">
+                <div class="datasync-side-header"><h6>Adicionadas recentemente</h6></div>
+                <div class="top-list">
+                    {% for item in recentes %}
+                    <a href="{{ url_for('arquivo_download_link', modulo=modulo, id=item.id) }}" target="_blank">
+                        <span class="rank secondary">{{ loop.index }}</span><span>{{ item.nome }}</span><strong>{{ item.created_at.strftime('%d/%m') if item.created_at else '-' }}</strong>
+                    </a>
+                    {% else %}<p class="text-muted mb-0">Nenhuma ferramenta cadastrada.</p>{% endfor %}
+                </div>
+            </div>
+        </aside>
     </div>
 </div>
 {% endblock %}

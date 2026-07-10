@@ -1,43 +1,58 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h3>{{ 'Editar' if item else 'Novo' }} Link - {{ titulo }}</h3>
-
-<form method="post" class="card p-3">
-    <div class="row g-3">
-        <div class="col-lg-6">
-            <label class="form-label">Nome da Ferramenta</label>
-            <input type="text" name="nome" class="form-control" value="{{ item.nome if item else '' }}" required>
-        </div>
-
-        <div class="col-lg-6">
-            <label class="form-label">Tipo</label>
-            {% set tipo_atual = item.tipo if item else '' %}
-            <select name="tipo" class="form-select" required>
-                <option value="">Selecione...</option>
-                <option value="Instalador" {% if tipo_atual == 'Instalador' %}selected{% endif %}>Instalador</option>
-                <option value="Atualizador" {% if tipo_atual == 'Atualizador' %}selected{% endif %}>Atualizador</option>
-                <option value="Utilitário" {% if tipo_atual == 'Utilitário' %}selected{% endif %}>Utilitário</option>
-                <option value="Conversor" {% if tipo_atual == 'Conversor' %}selected{% endif %}>Conversor</option>
-                <option value="Pacote ZIP" {% if tipo_atual == 'Pacote ZIP' %}selected{% endif %}>Pacote ZIP</option>
-                <option value="Outro" {% if tipo_atual == 'Outro' %}selected{% endif %}>Outro</option>
-            </select>
-        </div>
-
-        <div class="col-12">
-            <label class="form-label">Link para download</label>
-            <input type="url" name="link_download" class="form-control" value="{{ item.link_download if item else '' }}" placeholder="https://..." required>
+<div class="datasync-form-page">
+    <div class="datasync-hero">
+        <div class="datasync-title-row">
+            <div class="datasync-title-icon"><i class="bi bi-cloud-arrow-down"></i></div>
+            <div>
+                <h3>{{ 'Editar' if item else 'Nova' }} Ferramenta</h3>
+                <p>Cadastre os dados e o endereço externo para download.</p>
+            </div>
         </div>
     </div>
 
-    <div class="mt-3 d-flex gap-2">
-        <button class="btn btn-primary">
-            <i class="bi bi-save"></i> Salvar
-        </button>
+    <form method="post" class="datasync-form-card">
+        <div class="datasync-form-section">
+            <div class="section-title"><i class="bi bi-info-circle"></i><h5>Informações da ferramenta</h5></div>
+            <div class="row g-3">
+                <div class="col-lg-8">
+                    <label class="form-label">Nome da ferramenta</label>
+                    <input type="text" name="nome" class="form-control" value="{{ item.nome if item else '' }}" placeholder="Ex.: DataSync Recovery" required>
+                </div>
+                <div class="col-lg-4">
+                    <label class="form-label">Tipo</label>
+                    {% set tipo_atual = item.tipo if item else '' %}
+                    <select name="tipo" class="form-select" required>
+                        <option value="">Selecione...</option>
+                        {% for tipo_opcao in ['Instalador','Atualizador','Utilitário','Conversor','Pacote ZIP','Importador','Outro'] %}
+                        <option value="{{ tipo_opcao }}" {% if tipo_atual == tipo_opcao %}selected{% endif %}>{{ tipo_opcao }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Link para download</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+                        <input type="url" name="link_download" class="form-control" value="{{ item.link_download if item else '' }}" placeholder="https://..." required>
+                    </div>
+                    <div class="form-text">O contador aumenta quando o usuário clica no botão de download.</div>
+                </div>
+            </div>
+        </div>
 
-        <a href="{{ url_for('datasync' if modulo == 'datasync' else 'conversao') }}" class="btn btn-secondary">
-            Voltar
-        </a>
-    </div>
-</form>
+        {% if item %}
+        <div class="datasync-form-info">
+            <div><span>Downloads atuais</span><strong>{{ item.downloads or 0 }}</strong></div>
+            <div><span>Criado em</span><strong>{{ item.created_at.strftime('%d/%m/%Y') if item.created_at else '-' }}</strong></div>
+            <div><span>Atualizado em</span><strong>{{ item.updated_at.strftime('%d/%m/%Y') if item.updated_at else '-' }}</strong></div>
+        </div>
+        {% endif %}
+
+        <div class="datasync-form-actions">
+            <button class="btn btn-primary"><i class="bi bi-save"></i> Salvar</button>
+            <a href="{{ url_for('datasync' if modulo == 'datasync' else 'conversao') }}" class="btn btn-secondary">Voltar</a>
+        </div>
+    </form>
+</div>
 {% endblock %}

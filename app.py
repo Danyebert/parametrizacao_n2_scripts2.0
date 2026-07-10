@@ -101,6 +101,14 @@ class ArquivoDownload(db.Model, TimestampMixin):
     mime_type = db.Column(db.String(120))
     downloads = db.Column(db.Integer, default=0)
 
+class ArquivoDownloadAcesso(db.Model):
+    __tablename__ = "arquivos_download_acessos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    arquivo_id = db.Column(db.Integer, db.ForeignKey("arquivos_download.id"), nullable=False)
+    data_acesso = db.Column(db.Date, default=lambda: datetime.utcnow().date(), nullable=False)
+    quantidade = db.Column(db.Integer, default=1, nullable=False)
+
 
 
 def ensure_schema_updates():
@@ -120,6 +128,14 @@ def ensure_schema_updates():
             CREATE TABLE IF NOT EXISTS scripts_acessos (
                 id SERIAL PRIMARY KEY,
                 script_id INTEGER NOT NULL REFERENCES scripts_sql(id),
+                data_acesso DATE NOT NULL DEFAULT CURRENT_DATE,
+                quantidade INTEGER NOT NULL DEFAULT 1
+            )
+        """))
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS arquivos_download_acessos (
+                id SERIAL PRIMARY KEY,
+                arquivo_id INTEGER NOT NULL REFERENCES arquivos_download(id),
                 data_acesso DATE NOT NULL DEFAULT CURRENT_DATE,
                 quantidade INTEGER NOT NULL DEFAULT 1
             )
@@ -182,6 +198,50 @@ def normalize_identificador(texto):
     return texto.lower()
 
 
+
+def extrair_dados_identificador(linha):
+    """Extrai número e identificação de linhas com hífen, ponto e vírgula ou quebra de linha."""
+    linha = (linha or "").strip()
+    if not linha:
+        return "", ""
+
+    # Uniformiza os separadores mais comuns sem destruir textos internos.
+    partes = [
+        parte.strip()
+        for parte in re.split(r"\s*(?:;|\r?\n|\s+-\s+)\s*", linha)
+        if parte.strip()
+    ]
+
+    # Procura primeiro um bloco composto apenas por dígitos.
+    numero = next((p for p in partes if re.fullmatch(r"\d+", p)), "")
+
+    # Fallback para entrada sem separadores: ignora datas MM/AA e captura código numérico.
+    if not numero:
+        candidatos = re.findall(r"(?<![/\d])\d{3,}(?![/\d])", linha)
+        numero = candidatos[0] if candidatos else ""
+
+    partes_nome = []
+    numero_consumido = False
+    for parte in partes:
+        if re.fullmatch(r"\d{1,2}/\d{2,4}", parte):
+            continue
+        if numero and parte == numero and not numero_consumido:
+            numero_consumido = True
+            continue
+        partes_nome.append(parte)
+
+    texto_nome = " ".join(partes_nome).strip()
+
+    if not texto_nome:
+        texto_nome = linha
+        texto_nome = re.sub(r"\b\d{1,2}/\d{2,4}\b", " ", texto_nome)
+        if numero:
+            texto_nome = re.sub(rf"(?<!\d){re.escape(numero)}(?!\d)", " ", texto_nome, count=1)
+
+    identificador = normalize_identificador(texto_nome)
+    return numero, identificador
+
+
 def get_file_listing(modulo):
     return ArquivoDownload.query.filter_by(
         modulo=modulo,
@@ -221,8 +281,8 @@ def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.5.0",
-                "APP_BUILD": "2026-07-09",
+                "APP_VERSION": "2.7.0",
+                "APP_BUILD": "2026-07-10",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
     @app.route("/")
@@ -755,23 +815,161 @@ def register_routes(app):
     def banco_excluir(id):
         item=BancoMapeado.query.get_or_404(id); item.deleted_at=datetime.utcnow(); db.session.commit(); return redirect(url_for("bancos_listar"))
 
-    @app.route("/datasync")
-    def datasync():
+    def _listar_arquivos_modulo(modulo, titulo):
+        busca = (request.args.get("busca") or "").strip()
+        tipo = (request.args.get("tipo") or "").strip()
+        ordem = (request.args.get("ordem") or "recentes").strip()
+
+        hoje = datetime.utcnow().date()
+        inicio_7_dias = hoje - timedelta(days=6)
+
+        base = ArquivoDownload.query.filter_by(modulo=modulo, deleted_at=None)
+
+        tipos_disponiveis = [
+            r[0] for r in db.session.query(ArquivoDownload.tipo)
+            .filter(
+                ArquivoDownload.modulo == modulo,
+                ArquivoDownload.deleted_at == None,
+                ArquivoDownload.tipo != None
+            )
+            .distinct()
+            .order_by(ArquivoDownload.tipo)
+            .all()
+        ]
+
+        total_ferramentas = base.count()
+        total_downloads = db.session.query(
+            func.coalesce(func.sum(ArquivoDownload.downloads), 0)
+        ).filter(
+            ArquivoDownload.modulo == modulo,
+            ArquivoDownload.deleted_at == None
+        ).scalar() or 0
+        total_tipos = len(tipos_disponiveis)
+
+        mais_baixada = base.order_by(
+            ArquivoDownload.downloads.desc(),
+            ArquivoDownload.updated_at.desc()
+        ).first()
+
+        arquivos_7_dias = base.filter(
+            ArquivoDownload.created_at >= datetime.combine(
+                inicio_7_dias, datetime.min.time()
+            )
+        ).all()
+
+        sparkline_ferramentas = contar_por_dia_registros(
+            arquivos_7_dias, "created_at", inicio_7_dias
+        )
+
+        downloads_7_dias = db.session.query(
+            ArquivoDownloadAcesso.data_acesso,
+            func.sum(ArquivoDownloadAcesso.quantidade)
+        ).join(
+            ArquivoDownload,
+            ArquivoDownload.id == ArquivoDownloadAcesso.arquivo_id
+        ).filter(
+            ArquivoDownload.modulo == modulo,
+            ArquivoDownload.deleted_at == None,
+            ArquivoDownloadAcesso.data_acesso >= inicio_7_dias
+        ).group_by(
+            ArquivoDownloadAcesso.data_acesso
+        ).all()
+
+        mapa_downloads = {data: int(qtd or 0) for data, qtd in downloads_7_dias}
+        sparkline_downloads = [
+            mapa_downloads.get(inicio_7_dias + timedelta(days=i), 0)
+            for i in range(7)
+        ]
+
+        tipos_por_dia = {}
+        for arquivo in arquivos_7_dias:
+            if not arquivo.created_at:
+                continue
+            dia = arquivo.created_at.date()
+            tipos_por_dia.setdefault(dia, set()).add(arquivo.tipo or "Outro")
+
+        sparkline_tipos = [
+            len(tipos_por_dia.get(inicio_7_dias + timedelta(days=i), set()))
+            for i in range(7)
+        ]
+
+        sparkline_top = [0] * 7
+        if mais_baixada:
+            top_por_dia = db.session.query(
+                ArquivoDownloadAcesso.data_acesso,
+                func.sum(ArquivoDownloadAcesso.quantidade)
+            ).filter(
+                ArquivoDownloadAcesso.arquivo_id == mais_baixada.id,
+                ArquivoDownloadAcesso.data_acesso >= inicio_7_dias
+            ).group_by(
+                ArquivoDownloadAcesso.data_acesso
+            ).all()
+            mapa_top = {data: int(qtd or 0) for data, qtd in top_por_dia}
+            sparkline_top = [
+                mapa_top.get(inicio_7_dias + timedelta(days=i), 0)
+                for i in range(7)
+            ]
+
+        distribuicao_tipos = []
+        for nome_tipo in tipos_disponiveis:
+            qtd = base.filter(ArquivoDownload.tipo == nome_tipo).count()
+            percentual = round((qtd / total_ferramentas) * 100) if total_ferramentas else 0
+            distribuicao_tipos.append({"nome": nome_tipo, "qtd": qtd, "percentual": percentual})
+
+        q = base
+        if busca:
+            q = q.filter(or_(
+                ArquivoDownload.nome.ilike(f"%{busca}%"),
+                ArquivoDownload.tipo.ilike(f"%{busca}%")
+            ))
+        if tipo:
+            q = q.filter(ArquivoDownload.tipo == tipo)
+        if ordem == "az":
+            q = q.order_by(ArquivoDownload.nome.asc())
+        elif ordem == "za":
+            q = q.order_by(ArquivoDownload.nome.desc())
+        elif ordem == "downloads":
+            q = q.order_by(ArquivoDownload.downloads.desc(), ArquivoDownload.updated_at.desc())
+        elif ordem == "tipo":
+            q = q.order_by(ArquivoDownload.tipo.asc(), ArquivoDownload.nome.asc())
+        else:
+            q = q.order_by(ArquivoDownload.updated_at.desc())
+
+        itens = q.all()
+        top_downloads = base.order_by(
+            ArquivoDownload.downloads.desc(), ArquivoDownload.updated_at.desc()
+        ).limit(5).all()
+        recentes = base.order_by(ArquivoDownload.created_at.desc()).limit(5).all()
+
         return render_template(
             "datasync/list.html",
-            titulo="DataSync",
-            modulo="datasync",
-            itens=get_file_listing("datasync")
+            titulo=titulo,
+            modulo=modulo,
+            itens=itens,
+            busca=busca,
+            tipo=tipo,
+            ordem=ordem,
+            tipos_disponiveis=tipos_disponiveis,
+            total_ferramentas=total_ferramentas,
+            total_downloads=total_downloads,
+            total_tipos=total_tipos,
+            mais_baixada=mais_baixada,
+            distribuicao_tipos=distribuicao_tipos,
+            top_downloads=top_downloads,
+            recentes=recentes,
+            sparkline_ferramentas=sparkline_ferramentas,
+            sparkline_downloads=sparkline_downloads,
+            sparkline_tipos=sparkline_tipos,
+            sparkline_top=sparkline_top
         )
+
+    @app.route("/datasync")
+    def datasync():
+        return _listar_arquivos_modulo("datasync", "DataSync")
 
     @app.route("/conversao")
     def conversao():
-        return render_template(
-            "datasync/list.html",
-            titulo="Ferramentas de Conversão de Dados",
-            modulo="conversao",
-            itens=get_file_listing("conversao")
-        )
+        return _listar_arquivos_modulo("conversao", "Ferramentas de Conversão de Dados")
 
     def _modulo_redirect(modulo):
         return "datasync" if modulo == "datasync" else "conversao"
@@ -866,6 +1064,22 @@ def register_routes(app):
             deleted_at=None
         ).first_or_404()
         item.downloads = (item.downloads or 0) + 1
+
+        hoje = datetime.utcnow().date()
+        acesso_dia = ArquivoDownloadAcesso.query.filter_by(
+            arquivo_id=item.id,
+            data_acesso=hoje
+        ).first()
+
+        if acesso_dia:
+            acesso_dia.quantidade = (acesso_dia.quantidade or 0) + 1
+        else:
+            db.session.add(ArquivoDownloadAcesso(
+                arquivo_id=item.id,
+                data_acesso=hoje,
+                quantidade=1
+            ))
+
         db.session.commit()
 
         if not item.link_download:
@@ -875,15 +1089,39 @@ def register_routes(app):
         return redirect(item.link_download)
 
     @app.route("/gerador-identificador")
-    def gerador(): return render_template("conversao/identificador.html")
+    def gerador():
+        return render_template("conversao/identificador.html")
 
     @app.route("/api/identificador", methods=["POST"])
     def api_identificador():
-        linha = request.json.get("linha", "")
-        partes = [p.strip() for p in linha.split("-")]
-        numero = next((p for p in partes if p.isdigit()), "")
-        nome_cidade = "".join(partes[2:]) if len(partes) >= 3 else linha
-        return jsonify({"numero": numero, "identificador": normalize_identificador(nome_cidade)})
+        dados = request.get_json(silent=True) or {}
+        linha = (dados.get("linha") or "").strip()
+
+        if not linha:
+            return jsonify({
+                "ok": False,
+                "erro": "Digite ou cole uma linha antes de gerar."
+            }), 400
+
+        numero, identificador = extrair_dados_identificador(linha)
+
+        if not numero:
+            return jsonify({
+                "ok": False,
+                "erro": "Não foi possível localizar um número válido na linha."
+            }), 422
+
+        if not identificador:
+            return jsonify({
+                "ok": False,
+                "erro": "Não foi possível gerar o identificador a partir do texto informado."
+            }), 422
+
+        return jsonify({
+            "ok": True,
+            "numero": numero,
+            "identificador": identificador
+        })
 
 if __name__ == "__main__":
     create_app().run(debug=True)

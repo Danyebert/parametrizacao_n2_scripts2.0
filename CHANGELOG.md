@@ -150,3 +150,39 @@
 - Ajuste dos tooltips dos gráficos.
 - Correção dos KPIs.
 - Ajustes de layout e alinhamento.
+
+
+## v2.7.0 - 10/07/2026
+
+### Novo
+- Modernização completa do Gerador de Identificador.
+- Histórico persistente utilizando LocalStorage.
+- Métricas do Gerador.
+- Contador de identificadores gerados.
+- Contador de identificadores gerados no dia.
+- Histórico de identificadores.
+- Último identificador gerado.
+- Exportação do histórico.
+- Limpeza do histórico.
+- Copiar Número.
+- Copiar Identificador.
+- Copiar Ambos.
+- Toast de confirmação.
+- Atalho CTRL + ENTER para geração.
+
+### Melhorias
+- Layout seguindo o padrão visual dos demais módulos.
+- Melhor responsividade.
+- Melhor suporte ao tema escuro.
+- Melhor experiência de uso.
+- Validação dos campos.
+- Contador de caracteres.
+- Melhor tratamento de erros.
+
+### Padronização
+- Scripts SQL.
+- Correções N2.
+- DataSync.
+- Gerador de Identificador.
+
+Todos os módulos principais agora seguem a mesma identidade visual.
