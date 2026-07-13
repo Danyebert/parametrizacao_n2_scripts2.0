@@ -204,3 +204,26 @@ Todos os módulos principais agora seguem a mesma identidade visual.
 - Correção da integração entre HTML e JavaScript.
 - Ajuste dos IDs e ações dos botões.
 - Correção das funções de cópia.
+
+## v2.7.3 - 13/07/2026
+
+### Performance
+- Otimização das consultas SQL.
+- Redução de consultas repetidas (N+1).
+- Melhor gerenciamento de conexões PostgreSQL.
+- Ajuste do pool de conexões SQLAlchemy.
+- Otimização das métricas e gráficos.
+
+### Vercel
+- Melhor estabilidade nas conexões.
+- Redução de erros HTTP 500 relacionados ao PostgreSQL.
+- Melhor tratamento para reconexões SSL.
+
+### Banco de Dados
+- Inclusão de índices para consultas frequentes.
+- Melhor desempenho nas pesquisas.
+- Melhor desempenho dos rankings e dashboards.
+
+### Geral
+- Revisão da estrutura do `app.py`.
+- Ajustes para maior estabilidade em produção.

@@ -4,11 +4,11 @@ from functools import wraps
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_, func, text
+from sqlalchemy import or_, func, text, case
+from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
-from sqlalchemy.exc import OperationalError
 
 load_dotenv()
 db = SQLAlchemy()
@@ -148,33 +148,47 @@ def ensure_schema_updates():
 def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
+
     db_url = os.getenv("DATABASE_URL", "sqlite:///local.db")
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
     elif db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
-    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_pre_ping": True,
-    "pool_recycle": 300,
-    "pool_timeout": 20,
-    "pool_size": 5,
-    "max_overflow": 5,
-        }
     app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
+
+    # Evita reutilizar conexões PostgreSQL encerradas em instâncias serverless.
+    if not db_url.startswith("sqlite"):
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "pool_pre_ping": True,
+            "pool_recycle": 240,
+            "pool_timeout": 20,
+            "pool_size": 5,
+            "max_overflow": 5,
+            "connect_args": {
+                "connect_timeout": 10,
+                "application_name": "parametrizacao_n2",
+            },
+        }
+
     db.init_app(app)
 
-    with app.app_context():
-        db.create_all()
-        ensure_schema_updates()
-        create_default_admin()
+    # Não execute db.create_all() ou ALTER TABLE em cada cold start da Vercel.
+    # Para preparar/atualizar o banco, use o arquivo migrate.py entregue junto.
+    if os.getenv("CREATE_DEFAULT_ADMIN", "false").lower() == "true":
+        with app.app_context():
+            create_default_admin()
 
     register_routes(app)
+
     @app.teardown_appcontext
     def shutdown_session(exception=None):
+        if exception is not None:
+            db.session.rollback()
         db.session.remove()
+
     return app
 
 
@@ -293,36 +307,45 @@ def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.7.2",
-                "APP_BUILD": "2026-07-10",
+                "APP_VERSION": "2.7.3",
+                "APP_BUILD": "2026-07-13",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
     @app.route("/")
     def dashboard():
-        dias = int(request.args.get("dias", 7))
+        try:
+            dias = max(1, min(int(request.args.get("dias", 7)), 90))
+        except (TypeError, ValueError):
+            dias = 7
 
-        ultimas_correcoes = CorrecaoN2.query.filter_by(
-            deleted_at=None
+        contagens = db.session.query(
+            db.session.query(CorrecaoN2.id).filter(CorrecaoN2.deleted_at.is_(None)).count(),
+            db.session.query(ScriptSQL.id).filter(ScriptSQL.deleted_at.is_(None)).count(),
+            db.session.query(ArquivoDownload.id).filter(ArquivoDownload.deleted_at.is_(None)).count(),
+        ).first()
+
+        ultimas_correcoes = CorrecaoN2.query.filter(
+            CorrecaoN2.deleted_at.is_(None)
         ).order_by(CorrecaoN2.updated_at.desc()).limit(5).all()
 
-        ultimos_scripts = ScriptSQL.query.filter_by(
-            deleted_at=None
+        ultimos_scripts = ScriptSQL.query.filter(
+            ScriptSQL.deleted_at.is_(None)
         ).order_by(ScriptSQL.updated_at.desc()).limit(5).all()
 
-        arquivos_mais_baixados = ArquivoDownload.query.filter_by(
-            deleted_at=None
+        arquivos_mais_baixados = ArquivoDownload.query.filter(
+            ArquivoDownload.deleted_at.is_(None)
         ).order_by(ArquivoDownload.downloads.desc()).limit(5).all()
 
         return render_template(
             "dashboard.html",
-            correcoes=CorrecaoN2.query.filter_by(deleted_at=None).count(),
-            scripts=ScriptSQL.query.filter_by(deleted_at=None).count(),
-            bancos=BancoMapeado.query.filter_by(deleted_at=None).count(),
-            downloads=ArquivoDownload.query.filter_by(deleted_at=None).count(),
+            correcoes=contagens[0] if contagens else 0,
+            scripts=contagens[1] if contagens else 0,
+            bancos=0,
+            downloads=contagens[2] if contagens else 0,
             dias=dias,
             ultimas_correcoes=ultimas_correcoes,
             ultimos_scripts=ultimos_scripts,
-            arquivos_mais_baixados=arquivos_mais_baixados
+            arquivos_mais_baixados=arquivos_mais_baixados,
         )
 
     @app.route("/login", methods=["GET", "POST"])
@@ -364,139 +387,91 @@ def register_routes(app):
         ordem = (request.args.get("ordem") or "recentes").strip()
 
         hoje = datetime.utcnow().date()
-        inicio_7_dias = hoje - timedelta(days=6)
+        inicio = hoje - timedelta(days=6)
+        inicio_dt = datetime.combine(inicio, datetime.min.time())
+        base_filter = CorrecaoN2.deleted_at.is_(None)
 
-        base = CorrecaoN2.query.filter_by(deleted_at=None)
+        resumo = db.session.query(
+            func.count(CorrecaoN2.id),
+            func.sum(case((CorrecaoN2.criticidade == "Alta", 1), else_=0)),
+            func.count(func.distinct(CorrecaoN2.categoria)),
+            func.coalesce(func.sum(CorrecaoN2.acessos), 0),
+        ).filter(base_filter).first()
 
-        categorias = [
-            r[0] for r in db.session.query(CorrecaoN2.categoria)
-            .filter(CorrecaoN2.deleted_at == None, CorrecaoN2.categoria != None)
-            .distinct()
-            .order_by(CorrecaoN2.categoria)
-            .all()
+        total_correcoes = int(resumo[0] or 0)
+        alta_count = int(resumo[1] or 0)
+        total_categorias = int(resumo[2] or 0)
+        total_acessos = int(resumo[3] or 0)
+
+        categoria_rows = db.session.query(
+            CorrecaoN2.categoria,
+            func.count(CorrecaoN2.id),
+        ).filter(
+            base_filter,
+            CorrecaoN2.categoria.isnot(None),
+        ).group_by(CorrecaoN2.categoria).order_by(CorrecaoN2.categoria).all()
+
+        categorias = [nome for nome, _ in categoria_rows]
+        distribuicao_categorias = [
+            {"nome": nome, "qtd": qtd, "percentual": round(qtd * 100 / total_correcoes) if total_correcoes else 0}
+            for nome, qtd in categoria_rows
         ]
 
-        total_correcoes = base.count()
-        alta_count = base.filter(CorrecaoN2.criticidade == "Alta").count()
-        total_categorias = len(categorias)
-        total_acessos = db.session.query(func.coalesce(func.sum(CorrecaoN2.acessos), 0)).filter(
-            CorrecaoN2.deleted_at == None
-        ).scalar() or 0
-
-        correcoes_7_dias = base.filter(
-            CorrecaoN2.created_at >= datetime.combine(inicio_7_dias, datetime.min.time())
-        ).all()
-
-        sparkline_total_correcoes = contar_por_dia_registros(
-            correcoes_7_dias,
-            "created_at",
-            inicio_7_dias
-        )
-
-        sparkline_altas = contar_por_dia_registros(
-            [c for c in correcoes_7_dias if (c.criticidade or "").lower() == "alta"],
-            "created_at",
-            inicio_7_dias
-        )
-
-        categorias_7_dias = {}
-        for c in correcoes_7_dias:
-            dia = c.created_at.date() if c.created_at else None
-            if not dia:
-                continue
-            categorias_7_dias.setdefault(dia, set()).add(c.categoria or "Sem categoria")
-
-        sparkline_categorias = [
-            len(categorias_7_dias.get(inicio_7_dias + timedelta(days=i), set()))
-            for i in range(7)
+        criticidade_rows = dict(db.session.query(
+            CorrecaoN2.criticidade,
+            func.count(CorrecaoN2.id),
+        ).filter(base_filter).group_by(CorrecaoN2.criticidade).all())
+        distribuicao_criticidade = [
+            {"nome": nome, "qtd": int(criticidade_rows.get(nome, 0)), "percentual": round(criticidade_rows.get(nome, 0) * 100 / total_correcoes) if total_correcoes else 0}
+            for nome in ["Alta", "Média", "Baixa"]
         ]
 
-        acessos_7_dias = CorrecaoAcesso.query.filter(
-            CorrecaoAcesso.data_acesso >= inicio_7_dias
-        ).all()
+        criadas_rows = db.session.query(
+            func.date(CorrecaoN2.created_at),
+            func.count(CorrecaoN2.id),
+            func.sum(case((CorrecaoN2.criticidade == "Alta", 1), else_=0)),
+            func.count(func.distinct(CorrecaoN2.categoria)),
+        ).filter(base_filter, CorrecaoN2.created_at >= inicio_dt).group_by(func.date(CorrecaoN2.created_at)).all()
+        mapa_criadas = {str(d): (int(t or 0), int(a or 0), int(c or 0)) for d, t, a, c in criadas_rows}
+        sparkline_total_correcoes = []
+        sparkline_altas = []
+        sparkline_categorias = []
+        for i in range(7):
+            chave = str(inicio + timedelta(days=i))
+            t, a, c = mapa_criadas.get(chave, (0, 0, 0))
+            sparkline_total_correcoes.append(t)
+            sparkline_altas.append(a)
+            sparkline_categorias.append(c)
 
-        mapa_acessos = {}
-        for acesso in acessos_7_dias:
-            mapa_acessos[acesso.data_acesso] = mapa_acessos.get(acesso.data_acesso, 0) + (acesso.quantidade or 0)
+        acessos_rows = db.session.query(
+            CorrecaoAcesso.data_acesso,
+            func.sum(CorrecaoAcesso.quantidade),
+        ).filter(CorrecaoAcesso.data_acesso >= inicio).group_by(CorrecaoAcesso.data_acesso).all()
+        mapa_acessos = {d: int(q or 0) for d, q in acessos_rows}
+        sparkline_acessos = [mapa_acessos.get(inicio + timedelta(days=i), 0) for i in range(7)]
 
-        sparkline_acessos = [
-            mapa_acessos.get(inicio_7_dias + timedelta(days=i), 0)
-            for i in range(7)
-        ]
-
-        distribuicao_criticidade = []
-        for nome in ["Alta", "Média", "Baixa"]:
-            qtd = base.filter(CorrecaoN2.criticidade == nome).count()
-            percentual = round((qtd / total_correcoes) * 100) if total_correcoes else 0
-            distribuicao_criticidade.append({"nome": nome, "qtd": qtd, "percentual": percentual})
-
-        distribuicao_categorias = []
-        for nome_categoria in categorias:
-            qtd = base.filter(CorrecaoN2.categoria == nome_categoria).count()
-            percentual = round((qtd / total_correcoes) * 100) if total_correcoes else 0
-            distribuicao_categorias.append({"nome": nome_categoria or "Sem categoria", "qtd": qtd, "percentual": percentual})
-
-        q = base
-
+        q = CorrecaoN2.query.filter(base_filter)
         if busca:
-            q = q.filter(or_(
-                CorrecaoN2.titulo.ilike(f"%{busca}%"),
-                CorrecaoN2.sistema.ilike(f"%{busca}%"),
-                CorrecaoN2.categoria.ilike(f"%{busca}%"),
-                CorrecaoN2.erro.ilike(f"%{busca}%"),
-                CorrecaoN2.causa.ilike(f"%{busca}%"),
-                CorrecaoN2.correcao.ilike(f"%{busca}%")
-            ))
-
+            termo = f"%{busca}%"
+            q = q.filter(or_(CorrecaoN2.titulo.ilike(termo), CorrecaoN2.sistema.ilike(termo), CorrecaoN2.categoria.ilike(termo), CorrecaoN2.erro.ilike(termo), CorrecaoN2.causa.ilike(termo), CorrecaoN2.correcao.ilike(termo)))
         if categoria:
             q = q.filter(CorrecaoN2.categoria == categoria)
-
         if criticidade:
             q = q.filter(CorrecaoN2.criticidade == criticidade)
 
-        if ordem == "az":
-            q = q.order_by(CorrecaoN2.titulo.asc())
-        elif ordem == "za":
-            q = q.order_by(CorrecaoN2.titulo.desc())
-        elif ordem == "criticidade":
-            q = q.order_by(CorrecaoN2.criticidade.asc(), CorrecaoN2.updated_at.desc())
-        elif ordem == "acessos":
-            q = q.order_by(CorrecaoN2.acessos.desc(), CorrecaoN2.updated_at.desc())
-        else:
-            q = q.order_by(CorrecaoN2.updated_at.desc())
-
+        ordenacoes = {
+            "az": CorrecaoN2.titulo.asc(),
+            "za": CorrecaoN2.titulo.desc(),
+            "criticidade": CorrecaoN2.criticidade.asc(),
+            "acessos": CorrecaoN2.acessos.desc(),
+        }
+        q = q.order_by(ordenacoes.get(ordem, CorrecaoN2.updated_at.desc()), CorrecaoN2.updated_at.desc())
         itens = q.all()
 
-        top_correcoes = CorrecaoN2.query.filter_by(deleted_at=None).order_by(
-            CorrecaoN2.acessos.desc(),
-            CorrecaoN2.updated_at.desc()
-        ).limit(5).all()
+        top_correcoes = CorrecaoN2.query.filter(base_filter).order_by(CorrecaoN2.acessos.desc(), CorrecaoN2.updated_at.desc()).limit(5).all()
+        top_altas = CorrecaoN2.query.filter(base_filter, CorrecaoN2.criticidade == "Alta").order_by(CorrecaoN2.updated_at.desc()).limit(5).all()
 
-        top_altas = CorrecaoN2.query.filter_by(deleted_at=None, criticidade="Alta").order_by(
-            CorrecaoN2.updated_at.desc()
-        ).limit(5).all()
-
-        return render_template(
-            "correcoes/list.html",
-            itens=itens,
-            busca=busca,
-            categoria=categoria,
-            criticidade=criticidade,
-            ordem=ordem,
-            categorias=categorias,
-            total_correcoes=total_correcoes,
-            alta_count=alta_count,
-            total_categorias=total_categorias,
-            total_acessos=total_acessos,
-            distribuicao_criticidade=distribuicao_criticidade,
-            distribuicao_categorias=distribuicao_categorias,
-            top_correcoes=top_correcoes,
-            top_altas=top_altas,
-            sparkline_total_correcoes=sparkline_total_correcoes,
-            sparkline_altas=sparkline_altas,
-            sparkline_categorias=sparkline_categorias,
-            sparkline_acessos=sparkline_acessos
-        )
+        return render_template("correcoes/list.html", itens=itens, busca=busca, categoria=categoria, criticidade=criticidade, ordem=ordem, categorias=categorias, total_correcoes=total_correcoes, alta_count=alta_count, total_categorias=total_categorias, total_acessos=total_acessos, distribuicao_criticidade=distribuicao_criticidade, distribuicao_categorias=distribuicao_categorias, top_correcoes=top_correcoes, top_altas=top_altas, sparkline_total_correcoes=sparkline_total_correcoes, sparkline_altas=sparkline_altas, sparkline_categorias=sparkline_categorias, sparkline_acessos=sparkline_acessos)
 
     @app.route("/correcoes/novo", methods=["GET", "POST"])
     @admin_required
@@ -587,92 +562,54 @@ def register_routes(app):
         ordem = (request.args.get("ordem") or "recentes").strip()
 
         hoje = datetime.utcnow().date()
-        inicio_7_dias = hoje - timedelta(days=6)
+        inicio = hoje - timedelta(days=6)
+        inicio_dt = datetime.combine(inicio, datetime.min.time())
+        base_filter = ScriptSQL.deleted_at.is_(None)
 
-        base = ScriptSQL.query.filter_by(deleted_at=None)
+        resumo = db.session.query(
+            func.count(ScriptSQL.id),
+            func.sum(case((or_(ScriptSQL.tipo_banco.ilike("%SQL Server%"), ScriptSQL.tipo_banco.ilike("SQL")), 1), else_=0)),
+            func.coalesce(func.sum(ScriptSQL.acessos), 0),
+        ).filter(base_filter).first()
+        total_scripts = int(resumo[0] or 0)
+        sql_server_count = int(resumo[1] or 0)
+        total_acessos = int(resumo[2] or 0)
 
-        bancos_disponiveis = [
-            r[0] for r in db.session.query(ScriptSQL.tipo_banco)
-            .filter(ScriptSQL.deleted_at == None, ScriptSQL.tipo_banco != None)
-            .distinct()
-            .order_by(ScriptSQL.tipo_banco)
-            .all()
+        total_consultas = db.session.query(func.count(ConsultaSQL.id)).join(ScriptSQL, ConsultaSQL.script_id == ScriptSQL.id).filter(base_filter).scalar() or 0
+
+        banco_rows = db.session.query(ScriptSQL.tipo_banco, func.count(ScriptSQL.id)).filter(base_filter, ScriptSQL.tipo_banco.isnot(None)).group_by(ScriptSQL.tipo_banco).order_by(ScriptSQL.tipo_banco).all()
+        bancos_disponiveis = [nome for nome, _ in banco_rows]
+        distribuicao_bancos = [
+            {"nome": nome, "qtd": qtd, "percentual": round(qtd * 100 / total_scripts) if total_scripts else 0}
+            for nome, qtd in banco_rows
         ]
 
-        total_scripts = base.count()
-        sql_server_count = base.filter(
-            or_(
-                ScriptSQL.tipo_banco.ilike("%SQL Server%"),
-                ScriptSQL.tipo_banco.ilike("SQL")
-            )
-        ).count()
+        criados_rows = db.session.query(
+            func.date(ScriptSQL.created_at),
+            func.count(ScriptSQL.id),
+            func.sum(case((or_(ScriptSQL.tipo_banco.ilike("%SQL Server%"), ScriptSQL.tipo_banco.ilike("SQL")), 1), else_=0)),
+        ).filter(base_filter, ScriptSQL.created_at >= inicio_dt).group_by(func.date(ScriptSQL.created_at)).all()
+        mapa_criados = {str(d): (int(t or 0), int(sql or 0)) for d, t, sql in criados_rows}
+        sparkline_total_scripts = []
+        sparkline_sql_server = []
+        for i in range(7):
+            total, sql = mapa_criados.get(str(inicio + timedelta(days=i)), (0, 0))
+            sparkline_total_scripts.append(total)
+            sparkline_sql_server.append(sql)
 
-        total_consultas = db.session.query(ConsultaSQL).join(ScriptSQL).filter(
-            ScriptSQL.deleted_at == None
-        ).count()
+        consultas_rows = db.session.query(func.date(ConsultaSQL.created_at), func.count(ConsultaSQL.id)).filter(ConsultaSQL.created_at >= inicio_dt).group_by(func.date(ConsultaSQL.created_at)).all()
+        mapa_consultas = {str(d): int(q or 0) for d, q in consultas_rows}
+        sparkline_consultas = [mapa_consultas.get(str(inicio + timedelta(days=i)), 0) for i in range(7)]
 
-        total_acessos = db.session.query(func.coalesce(func.sum(ScriptSQL.acessos), 0)).filter(ScriptSQL.deleted_at == None).scalar() or 0
+        acessos_rows = db.session.query(ScriptAcesso.data_acesso, func.sum(ScriptAcesso.quantidade)).filter(ScriptAcesso.data_acesso >= inicio).group_by(ScriptAcesso.data_acesso).all()
+        mapa_acessos = {d: int(q or 0) for d, q in acessos_rows}
+        sparkline_acessos = [mapa_acessos.get(inicio + timedelta(days=i), 0) for i in range(7)]
+        sparkline_dias = [(inicio + timedelta(days=i)).strftime("%d/%m") for i in range(7)]
 
-        scripts_7_dias_base = base.filter(ScriptSQL.created_at >= datetime.combine(inicio_7_dias, datetime.min.time())).all()
-
-        sparkline_total_scripts = contar_por_dia_registros(
-            scripts_7_dias_base,
-            "created_at",
-            inicio_7_dias
-        )
-
-        sparkline_sql_server = contar_por_dia_registros(
-            [
-                s for s in scripts_7_dias_base
-                if s.tipo_banco and ("sql server" in s.tipo_banco.lower() or s.tipo_banco.lower() == "sql")
-            ],
-            "created_at",
-            inicio_7_dias
-        )
-
-        consultas_7_dias = ConsultaSQL.query.filter(
-            ConsultaSQL.created_at >= datetime.combine(inicio_7_dias, datetime.min.time())
-        ).all()
-
-        sparkline_consultas = contar_por_dia_registros(
-            consultas_7_dias,
-            "created_at",
-            inicio_7_dias
-        )
-
-        acessos_7_dias = ScriptAcesso.query.filter(
-            ScriptAcesso.data_acesso >= inicio_7_dias
-        ).all()
-
-        mapa_acessos = {}
-        for acesso in acessos_7_dias:
-            mapa_acessos[acesso.data_acesso] = mapa_acessos.get(acesso.data_acesso, 0) + (acesso.quantidade or 0)
-
-        sparkline_acessos = [
-            mapa_acessos.get(inicio_7_dias + timedelta(days=i), 0)
-            for i in range(7)
-        ]
-
-        distribuicao_bancos = []
-        for nome_banco in bancos_disponiveis:
-            qtd = base.filter(ScriptSQL.tipo_banco == nome_banco).count()
-            percentual = round((qtd / total_scripts) * 100) if total_scripts else 0
-            distribuicao_bancos.append({
-                "nome": nome_banco,
-                "qtd": qtd,
-                "percentual": percentual
-            })
-
-        q = base
-
+        q = ScriptSQL.query.options(selectinload(ScriptSQL.consultas)).filter(base_filter)
         if busca:
-            q = q.filter(or_(
-                ScriptSQL.titulo.ilike(f"%{busca}%"),
-                ScriptSQL.tipo_banco.ilike(f"%{busca}%"),
-                ScriptSQL.descricao.ilike(f"%{busca}%"),
-                ScriptSQL.observacoes.ilike(f"%{busca}%")
-            ))
-
+            termo = f"%{busca}%"
+            q = q.filter(or_(ScriptSQL.titulo.ilike(termo), ScriptSQL.tipo_banco.ilike(termo), ScriptSQL.descricao.ilike(termo), ScriptSQL.observacoes.ilike(termo)))
         if banco:
             q = q.filter(ScriptSQL.tipo_banco == banco)
 
@@ -686,42 +623,12 @@ def register_routes(app):
             q = q.order_by(ScriptSQL.acessos.desc(), ScriptSQL.updated_at.desc())
         else:
             q = q.order_by(ScriptSQL.updated_at.desc())
-
         itens = q.all()
 
-        todos_scripts = base.all()
+        top_scripts = ScriptSQL.query.filter(base_filter).order_by(ScriptSQL.acessos.desc(), ScriptSQL.updated_at.desc()).limit(5).all()
+        top_consultas = ScriptSQL.query.options(selectinload(ScriptSQL.consultas)).filter(base_filter).outerjoin(ConsultaSQL).group_by(ScriptSQL.id).order_by(func.count(ConsultaSQL.id).desc(), ScriptSQL.updated_at.desc()).limit(5).all()
 
-        top_scripts = ScriptSQL.query.filter_by(deleted_at=None).order_by(
-            ScriptSQL.acessos.desc(),
-            ScriptSQL.updated_at.desc()
-        ).limit(5).all()
-
-        top_consultas = sorted(
-            todos_scripts,
-            key=lambda s: len(s.consultas),
-            reverse=True
-        )[:5]
-
-        return render_template(
-            "scripts/list.html",
-            itens=itens,
-            busca=busca,
-            banco=banco,
-            ordem=ordem,
-            bancos_disponiveis=bancos_disponiveis,
-            total_scripts=total_scripts,
-            sql_server_count=sql_server_count,
-            total_consultas=total_consultas,
-            total_acessos=total_acessos,
-            favoritos=0,
-            distribuicao_bancos=distribuicao_bancos,
-            top_scripts=top_scripts,
-            top_consultas=top_consultas,
-            sparkline_total_scripts=sparkline_total_scripts,
-            sparkline_sql_server=sparkline_sql_server,
-            sparkline_consultas=sparkline_consultas,
-            sparkline_acessos=sparkline_acessos
-        )
+        return render_template("scripts/list.html", itens=itens, busca=busca, banco=banco, ordem=ordem, bancos_disponiveis=bancos_disponiveis, total_scripts=total_scripts, sql_server_count=sql_server_count, total_consultas=int(total_consultas), total_acessos=total_acessos, favoritos=0, distribuicao_bancos=distribuicao_bancos, top_scripts=top_scripts, top_consultas=top_consultas, sparkline_total_scripts=sparkline_total_scripts, sparkline_sql_server=sparkline_sql_server, sparkline_consultas=sparkline_consultas, sparkline_acessos=sparkline_acessos, sparkline_dias=sparkline_dias)
 
     @app.route("/scripts/novo", methods=["GET", "POST"])
     @admin_required
@@ -833,107 +740,51 @@ def register_routes(app):
         ordem = (request.args.get("ordem") or "recentes").strip()
 
         hoje = datetime.utcnow().date()
-        inicio_7_dias = hoje - timedelta(days=6)
+        inicio = hoje - timedelta(days=6)
+        inicio_dt = datetime.combine(inicio, datetime.min.time())
+        base_filter = (ArquivoDownload.modulo == modulo, ArquivoDownload.deleted_at.is_(None))
 
-        base = ArquivoDownload.query.filter_by(modulo=modulo, deleted_at=None)
+        resumo = db.session.query(
+            func.count(ArquivoDownload.id),
+            func.coalesce(func.sum(ArquivoDownload.downloads), 0),
+            func.count(func.distinct(ArquivoDownload.tipo)),
+        ).filter(*base_filter).first()
+        total_ferramentas = int(resumo[0] or 0)
+        total_downloads = int(resumo[1] or 0)
+        total_tipos = int(resumo[2] or 0)
 
-        tipos_disponiveis = [
-            r[0] for r in db.session.query(ArquivoDownload.tipo)
-            .filter(
-                ArquivoDownload.modulo == modulo,
-                ArquivoDownload.deleted_at == None,
-                ArquivoDownload.tipo != None
-            )
-            .distinct()
-            .order_by(ArquivoDownload.tipo)
-            .all()
+        tipo_rows = db.session.query(ArquivoDownload.tipo, func.count(ArquivoDownload.id)).filter(*base_filter, ArquivoDownload.tipo.isnot(None)).group_by(ArquivoDownload.tipo).order_by(ArquivoDownload.tipo).all()
+        tipos_disponiveis = [nome for nome, _ in tipo_rows]
+        distribuicao_tipos = [
+            {"nome": nome, "qtd": qtd, "percentual": round(qtd * 100 / total_ferramentas) if total_ferramentas else 0}
+            for nome, qtd in tipo_rows
         ]
 
-        total_ferramentas = base.count()
-        total_downloads = db.session.query(
-            func.coalesce(func.sum(ArquivoDownload.downloads), 0)
-        ).filter(
-            ArquivoDownload.modulo == modulo,
-            ArquivoDownload.deleted_at == None
-        ).scalar() or 0
-        total_tipos = len(tipos_disponiveis)
+        mais_baixada = ArquivoDownload.query.filter(*base_filter).order_by(ArquivoDownload.downloads.desc(), ArquivoDownload.updated_at.desc()).first()
 
-        mais_baixada = base.order_by(
-            ArquivoDownload.downloads.desc(),
-            ArquivoDownload.updated_at.desc()
-        ).first()
+        criados_rows = db.session.query(func.date(ArquivoDownload.created_at), func.count(ArquivoDownload.id), func.count(func.distinct(ArquivoDownload.tipo))).filter(*base_filter, ArquivoDownload.created_at >= inicio_dt).group_by(func.date(ArquivoDownload.created_at)).all()
+        mapa_criados = {str(d): (int(q or 0), int(t or 0)) for d, q, t in criados_rows}
+        sparkline_ferramentas = []
+        sparkline_tipos = []
+        for i in range(7):
+            q, t = mapa_criados.get(str(inicio + timedelta(days=i)), (0, 0))
+            sparkline_ferramentas.append(q)
+            sparkline_tipos.append(t)
 
-        arquivos_7_dias = base.filter(
-            ArquivoDownload.created_at >= datetime.combine(
-                inicio_7_dias, datetime.min.time()
-            )
-        ).all()
-
-        sparkline_ferramentas = contar_por_dia_registros(
-            arquivos_7_dias, "created_at", inicio_7_dias
-        )
-
-        downloads_7_dias = db.session.query(
-            ArquivoDownloadAcesso.data_acesso,
-            func.sum(ArquivoDownloadAcesso.quantidade)
-        ).join(
-            ArquivoDownload,
-            ArquivoDownload.id == ArquivoDownloadAcesso.arquivo_id
-        ).filter(
-            ArquivoDownload.modulo == modulo,
-            ArquivoDownload.deleted_at == None,
-            ArquivoDownloadAcesso.data_acesso >= inicio_7_dias
-        ).group_by(
-            ArquivoDownloadAcesso.data_acesso
-        ).all()
-
-        mapa_downloads = {data: int(qtd or 0) for data, qtd in downloads_7_dias}
-        sparkline_downloads = [
-            mapa_downloads.get(inicio_7_dias + timedelta(days=i), 0)
-            for i in range(7)
-        ]
-
-        tipos_por_dia = {}
-        for arquivo in arquivos_7_dias:
-            if not arquivo.created_at:
-                continue
-            dia = arquivo.created_at.date()
-            tipos_por_dia.setdefault(dia, set()).add(arquivo.tipo or "Outro")
-
-        sparkline_tipos = [
-            len(tipos_por_dia.get(inicio_7_dias + timedelta(days=i), set()))
-            for i in range(7)
-        ]
+        downloads_rows = db.session.query(ArquivoDownloadAcesso.data_acesso, func.sum(ArquivoDownloadAcesso.quantidade)).join(ArquivoDownload, ArquivoDownload.id == ArquivoDownloadAcesso.arquivo_id).filter(*base_filter, ArquivoDownloadAcesso.data_acesso >= inicio).group_by(ArquivoDownloadAcesso.data_acesso).all()
+        mapa_downloads = {d: int(q or 0) for d, q in downloads_rows}
+        sparkline_downloads = [mapa_downloads.get(inicio + timedelta(days=i), 0) for i in range(7)]
 
         sparkline_top = [0] * 7
         if mais_baixada:
-            top_por_dia = db.session.query(
-                ArquivoDownloadAcesso.data_acesso,
-                func.sum(ArquivoDownloadAcesso.quantidade)
-            ).filter(
-                ArquivoDownloadAcesso.arquivo_id == mais_baixada.id,
-                ArquivoDownloadAcesso.data_acesso >= inicio_7_dias
-            ).group_by(
-                ArquivoDownloadAcesso.data_acesso
-            ).all()
-            mapa_top = {data: int(qtd or 0) for data, qtd in top_por_dia}
-            sparkline_top = [
-                mapa_top.get(inicio_7_dias + timedelta(days=i), 0)
-                for i in range(7)
-            ]
+            top_rows = db.session.query(ArquivoDownloadAcesso.data_acesso, func.sum(ArquivoDownloadAcesso.quantidade)).filter(ArquivoDownloadAcesso.arquivo_id == mais_baixada.id, ArquivoDownloadAcesso.data_acesso >= inicio).group_by(ArquivoDownloadAcesso.data_acesso).all()
+            mapa_top = {d: int(q or 0) for d, q in top_rows}
+            sparkline_top = [mapa_top.get(inicio + timedelta(days=i), 0) for i in range(7)]
 
-        distribuicao_tipos = []
-        for nome_tipo in tipos_disponiveis:
-            qtd = base.filter(ArquivoDownload.tipo == nome_tipo).count()
-            percentual = round((qtd / total_ferramentas) * 100) if total_ferramentas else 0
-            distribuicao_tipos.append({"nome": nome_tipo, "qtd": qtd, "percentual": percentual})
-
-        q = base
+        q = ArquivoDownload.query.filter(*base_filter)
         if busca:
-            q = q.filter(or_(
-                ArquivoDownload.nome.ilike(f"%{busca}%"),
-                ArquivoDownload.tipo.ilike(f"%{busca}%")
-            ))
+            termo = f"%{busca}%"
+            q = q.filter(or_(ArquivoDownload.nome.ilike(termo), ArquivoDownload.tipo.ilike(termo)))
         if tipo:
             q = q.filter(ArquivoDownload.tipo == tipo)
         if ordem == "az":
@@ -948,32 +799,10 @@ def register_routes(app):
             q = q.order_by(ArquivoDownload.updated_at.desc())
 
         itens = q.all()
-        top_downloads = base.order_by(
-            ArquivoDownload.downloads.desc(), ArquivoDownload.updated_at.desc()
-        ).limit(5).all()
-        recentes = base.order_by(ArquivoDownload.created_at.desc()).limit(5).all()
+        top_downloads = ArquivoDownload.query.filter(*base_filter).order_by(ArquivoDownload.downloads.desc(), ArquivoDownload.updated_at.desc()).limit(5).all()
+        recentes = ArquivoDownload.query.filter(*base_filter).order_by(ArquivoDownload.created_at.desc()).limit(5).all()
 
-        return render_template(
-            "datasync/list.html",
-            titulo=titulo,
-            modulo=modulo,
-            itens=itens,
-            busca=busca,
-            tipo=tipo,
-            ordem=ordem,
-            tipos_disponiveis=tipos_disponiveis,
-            total_ferramentas=total_ferramentas,
-            total_downloads=total_downloads,
-            total_tipos=total_tipos,
-            mais_baixada=mais_baixada,
-            distribuicao_tipos=distribuicao_tipos,
-            top_downloads=top_downloads,
-            recentes=recentes,
-            sparkline_ferramentas=sparkline_ferramentas,
-            sparkline_downloads=sparkline_downloads,
-            sparkline_tipos=sparkline_tipos,
-            sparkline_top=sparkline_top
-        )
+        return render_template("datasync/list.html", titulo=titulo, modulo=modulo, itens=itens, busca=busca, tipo=tipo, ordem=ordem, tipos_disponiveis=tipos_disponiveis, total_ferramentas=total_ferramentas, total_downloads=total_downloads, total_tipos=total_tipos, mais_baixada=mais_baixada, distribuicao_tipos=distribuicao_tipos, top_downloads=top_downloads, recentes=recentes, sparkline_ferramentas=sparkline_ferramentas, sparkline_downloads=sparkline_downloads, sparkline_tipos=sparkline_tipos, sparkline_top=sparkline_top)
 
     @app.route("/datasync")
     def datasync():
