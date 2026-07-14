@@ -81,67 +81,39 @@
         <div class="correcoes-main">
 
             <div class="correcoes-kpi-grid">
-                <div class="correcoes-kpi-card kpi-purple has-real-sparkline">
+                <div class="correcoes-kpi-card kpi-purple">
                     <div class="correcoes-kpi-icon"><i class="bi bi-tools"></i></div>
                     <div>
                         <span>Total Correções</span>
                         <h2>{{ total_correcoes }}</h2>
                         <p>Todas as correções cadastradas</p>
                     </div>
-                    <div class="real-sparkline">
-                        {% set maior = sparkline_total_correcoes|max if sparkline_total_correcoes else 1 %}
-                        {% for valor in sparkline_total_correcoes %}
-                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
-                            <span data-tooltip="{{ valor }} correção{{ 'es' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
-                        {% endfor %}
-                    </div>
                 </div>
 
-                <div class="correcoes-kpi-card kpi-red has-real-sparkline">
+                <div class="correcoes-kpi-card kpi-red">
                     <div class="correcoes-kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
                     <div>
                         <span>Alta criticidade</span>
                         <h2>{{ alta_count }}</h2>
                         <p>Correções classificadas como alta</p>
                     </div>
-                    <div class="real-sparkline">
-                        {% set maior = sparkline_altas|max if sparkline_altas else 1 %}
-                        {% for valor in sparkline_altas %}
-                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
-                            <span data-tooltip="{{ valor }} alta{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
-                        {% endfor %}
-                    </div>
                 </div>
 
-                <div class="correcoes-kpi-card kpi-green has-real-sparkline">
+                <div class="correcoes-kpi-card kpi-green">
                     <div class="correcoes-kpi-icon"><i class="bi bi-tags"></i></div>
                     <div>
                         <span>Categorias</span>
                         <h2>{{ total_categorias }}</h2>
                         <p>Categorias cadastradas</p>
                     </div>
-                    <div class="real-sparkline">
-                        {% set maior = sparkline_categorias|max if sparkline_categorias else 1 %}
-                        {% for valor in sparkline_categorias %}
-                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
-                            <span data-tooltip="{{ valor }} categoria{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
-                        {% endfor %}
-                    </div>
                 </div>
 
-                <div class="correcoes-kpi-card kpi-orange has-real-sparkline">
+                <div class="correcoes-kpi-card kpi-orange">
                     <div class="correcoes-kpi-icon"><i class="bi bi-eye"></i></div>
                     <div>
                         <span>Acessos</span>
                         <h2>{{ total_acessos or 0 }}</h2>
                         <p>Total de visualizações</p>
-                    </div>
-                    <div class="real-sparkline">
-                        {% set maior = sparkline_acessos|max if sparkline_acessos else 1 %}
-                        {% for valor in sparkline_acessos %}
-                            {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
-                            <span data-tooltip="{{ valor }} acesso{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
-                        {% endfor %}
                     </div>
                 </div>
             </div>

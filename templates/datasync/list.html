@@ -41,38 +41,27 @@
     <div class="datasync-layout">
         <div class="datasync-main">
             <div class="datasync-kpi-grid">
-                {% set cards = [
-                    ('kpi-blue','bi-box-seam','Ferramentas',total_ferramentas,'Total cadastrado',sparkline_ferramentas,'ferramenta'),
-                    ('kpi-cyan','bi-download','Downloads',total_downloads,'Total de downloads',sparkline_downloads,'download'),
-                    ('kpi-green','bi-tags','Tipos',total_tipos,'Tipos de ferramentas',sparkline_tipos,'tipo')
-                ] %}
-                {% for classe, icone, rotulo, total, descricao, spark, singular in cards %}
-                <div class="datasync-kpi-card {{ classe }} has-real-sparkline">
-                    <div class="datasync-kpi-icon"><i class="bi {{ icone }}"></i></div>
-                    <div><span>{{ rotulo }}</span><h2>{{ total }}</h2><p>{{ descricao }}</p></div>
-                    <div class="real-sparkline">
-                        {% set maior = spark|max if spark else 1 %}
-                        {% for valor in spark %}
-                        {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
-                        <span data-tooltip="{{ valor }} {{ singular }}{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
-                        {% endfor %}
-                    </div>
+                <div class="datasync-kpi-card kpi-blue">
+                    <div class="datasync-kpi-icon"><i class="bi bi-box-seam"></i></div>
+                    <div><span>Ferramentas</span><h2>{{ total_ferramentas }}</h2><p>Total cadastrado</p></div>
                 </div>
-                {% endfor %}
 
-                <div class="datasync-kpi-card kpi-purple has-real-sparkline">
+                <div class="datasync-kpi-card kpi-cyan">
+                    <div class="datasync-kpi-icon"><i class="bi bi-download"></i></div>
+                    <div><span>Downloads</span><h2>{{ total_downloads }}</h2><p>Total de downloads</p></div>
+                </div>
+
+                <div class="datasync-kpi-card kpi-green">
+                    <div class="datasync-kpi-icon"><i class="bi bi-tags"></i></div>
+                    <div><span>Tipos</span><h2>{{ total_tipos }}</h2><p>Tipos de ferramentas</p></div>
+                </div>
+
+                <div class="datasync-kpi-card kpi-purple">
                     <div class="datasync-kpi-icon"><i class="bi bi-trophy"></i></div>
                     <div>
                         <span>Mais baixada</span>
                         <h2>{{ mais_baixada.downloads if mais_baixada else 0 }}</h2>
                         <p>{{ mais_baixada.nome|truncate(28) if mais_baixada else 'Sem dados' }}</p>
-                    </div>
-                    <div class="real-sparkline">
-                        {% set maior = sparkline_top|max if sparkline_top else 1 %}
-                        {% for valor in sparkline_top %}
-                        {% set altura = ((valor / maior) * 32) if maior > 0 else 4 %}
-                        <span data-tooltip="{{ valor }} download{{ 's' if valor != 1 else '' }}" style="height: {{ altura if altura > 4 else 4 }}px"></span>
-                        {% endfor %}
                     </div>
                 </div>
             </div>

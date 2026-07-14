@@ -1,5 +1,5 @@
 import os, io, json, zipfile, unicodedata, re
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, abort, jsonify
@@ -276,39 +276,13 @@ def get_file_listing(modulo):
 
 
 
-def gerar_sparkline(valores, tamanho=7):
-    valores = list(valores or [])
-    if len(valores) < tamanho:
-        valores = ([0] * (tamanho - len(valores))) + valores
-    return valores[-tamanho:]
-
-
-def contar_por_dia_registros(registros, campo_data, inicio, dias=7):
-    mapa = {}
-    for item in registros:
-        valor_data = getattr(item, campo_data, None)
-        if not valor_data:
-            continue
-
-        dia = valor_data.date() if hasattr(valor_data, "date") else valor_data
-
-        if dia < inicio:
-            continue
-
-        mapa[dia] = mapa.get(dia, 0) + 1
-
-    return [
-        mapa.get(inicio + timedelta(days=i), 0)
-        for i in range(dias)
-    ]
-
 
 def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.7.4",
-                "APP_BUILD": "2026-07-13",
+                "APP_VERSION": "2.7.6",
+                "APP_BUILD": "2026-07-14",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
     @app.route("/")
@@ -420,9 +394,6 @@ def register_routes(app):
         pagina = max(pagina or 1, 1)
         por_pagina = min(max(por_pagina or 12, 6), 48)
 
-        hoje = datetime.utcnow().date()
-        inicio = hoje - timedelta(days=6)
-        inicio_dt = datetime.combine(inicio, datetime.min.time())
         base_filter = CorrecaoN2.deleted_at.is_(None)
 
         resumo = db.session.query(
@@ -460,29 +431,6 @@ def register_routes(app):
             for nome in ["Alta", "Média", "Baixa"]
         ]
 
-        criadas_rows = db.session.query(
-            func.date(CorrecaoN2.created_at),
-            func.count(CorrecaoN2.id),
-            func.sum(case((CorrecaoN2.criticidade == "Alta", 1), else_=0)),
-            func.count(func.distinct(CorrecaoN2.categoria)),
-        ).filter(base_filter, CorrecaoN2.created_at >= inicio_dt).group_by(func.date(CorrecaoN2.created_at)).all()
-        mapa_criadas = {str(d): (int(t or 0), int(a or 0), int(c or 0)) for d, t, a, c in criadas_rows}
-        sparkline_total_correcoes = []
-        sparkline_altas = []
-        sparkline_categorias = []
-        for i in range(7):
-            chave = str(inicio + timedelta(days=i))
-            t, a, c = mapa_criadas.get(chave, (0, 0, 0))
-            sparkline_total_correcoes.append(t)
-            sparkline_altas.append(a)
-            sparkline_categorias.append(c)
-
-        acessos_rows = db.session.query(
-            CorrecaoAcesso.data_acesso,
-            func.sum(CorrecaoAcesso.quantidade),
-        ).filter(CorrecaoAcesso.data_acesso >= inicio).group_by(CorrecaoAcesso.data_acesso).all()
-        mapa_acessos = {d: int(q or 0) for d, q in acessos_rows}
-        sparkline_acessos = [mapa_acessos.get(inicio + timedelta(days=i), 0) for i in range(7)]
 
         q = (
             CorrecaoN2.query
@@ -579,11 +527,7 @@ def register_routes(app):
             top_correcoes=top_correcoes,
             top_altas=top_altas,
             paginacao=paginacao,
-            por_pagina=por_pagina,
-            sparkline_total_correcoes=sparkline_total_correcoes,
-            sparkline_altas=sparkline_altas,
-            sparkline_categorias=sparkline_categorias,
-            sparkline_acessos=sparkline_acessos
+            por_pagina=por_pagina
         )
 
     @app.route("/correcoes/novo", methods=["GET", "POST"])
@@ -679,9 +623,6 @@ def register_routes(app):
         pagina = max(pagina or 1, 1)
         por_pagina = min(max(por_pagina or 12, 6), 48)
 
-        hoje = datetime.utcnow().date()
-        inicio = hoje - timedelta(days=6)
-        inicio_dt = datetime.combine(inicio, datetime.min.time())
         base_filter = ScriptSQL.deleted_at.is_(None)
 
         resumo = db.session.query(
@@ -740,89 +681,6 @@ def register_routes(app):
             for nome, qtd in banco_rows
         ]
 
-        criados_rows = (
-            db.session.query(
-                func.date(ScriptSQL.created_at),
-                func.count(ScriptSQL.id),
-                func.sum(
-                    case(
-                        (
-                            or_(
-                                ScriptSQL.tipo_banco.ilike("%SQL Server%"),
-                                ScriptSQL.tipo_banco.ilike("SQL")
-                            ),
-                            1
-                        ),
-                        else_=0
-                    )
-                ),
-            )
-            .filter(
-                base_filter,
-                ScriptSQL.created_at >= inicio_dt
-            )
-            .group_by(func.date(ScriptSQL.created_at))
-            .all()
-        )
-
-        mapa_criados = {
-            str(data): (int(total or 0), int(total_sql or 0))
-            for data, total, total_sql in criados_rows
-        }
-
-        sparkline_total_scripts = []
-        sparkline_sql_server = []
-
-        for indice in range(7):
-            chave = str(inicio + timedelta(days=indice))
-            total_dia, sql_dia = mapa_criados.get(chave, (0, 0))
-            sparkline_total_scripts.append(total_dia)
-            sparkline_sql_server.append(sql_dia)
-
-        consultas_rows = (
-            db.session.query(
-                func.date(ConsultaSQL.created_at),
-                func.count(ConsultaSQL.id)
-            )
-            .filter(ConsultaSQL.created_at >= inicio_dt)
-            .group_by(func.date(ConsultaSQL.created_at))
-            .all()
-        )
-
-        mapa_consultas = {
-            str(data): int(quantidade or 0)
-            for data, quantidade in consultas_rows
-        }
-
-        sparkline_consultas = [
-            mapa_consultas.get(str(inicio + timedelta(days=indice)), 0)
-            for indice in range(7)
-        ]
-
-        acessos_rows = (
-            db.session.query(
-                ScriptAcesso.data_acesso,
-                func.sum(ScriptAcesso.quantidade)
-            )
-            .filter(ScriptAcesso.data_acesso >= inicio)
-            .group_by(ScriptAcesso.data_acesso)
-            .all()
-        )
-
-        mapa_acessos = {
-            data: int(quantidade or 0)
-            for data, quantidade in acessos_rows
-        }
-
-        sparkline_acessos = [
-            mapa_acessos.get(inicio + timedelta(days=indice), 0)
-            for indice in range(7)
-        ]
-
-        sparkline_dias = [
-            (inicio + timedelta(days=indice)).strftime("%d/%m")
-            for indice in range(7)
-        ]
 
         q = (
             ScriptSQL.query
@@ -953,12 +811,7 @@ def register_routes(app):
             top_consultas=top_consultas,
             contagens_consultas=contagens_consultas,
             paginacao=paginacao,
-            por_pagina=por_pagina,
-            sparkline_total_scripts=sparkline_total_scripts,
-            sparkline_sql_server=sparkline_sql_server,
-            sparkline_consultas=sparkline_consultas,
-            sparkline_acessos=sparkline_acessos,
-            sparkline_dias=sparkline_dias
+            por_pagina=por_pagina
         )
 
     @app.route("/scripts/novo", methods=["GET", "POST"])
@@ -1075,9 +928,6 @@ def register_routes(app):
         pagina = max(pagina or 1, 1)
         por_pagina = min(max(por_pagina or 12, 6), 48)
 
-        hoje = datetime.utcnow().date()
-        inicio = hoje - timedelta(days=6)
-        inicio_dt = datetime.combine(inicio, datetime.min.time())
         base_filter = (ArquivoDownload.modulo == modulo, ArquivoDownload.deleted_at.is_(None))
 
         resumo = db.session.query(
@@ -1098,24 +948,6 @@ def register_routes(app):
 
         mais_baixada = ArquivoDownload.query.filter(*base_filter).order_by(ArquivoDownload.downloads.desc(), ArquivoDownload.updated_at.desc()).first()
 
-        criados_rows = db.session.query(func.date(ArquivoDownload.created_at), func.count(ArquivoDownload.id), func.count(func.distinct(ArquivoDownload.tipo))).filter(*base_filter, ArquivoDownload.created_at >= inicio_dt).group_by(func.date(ArquivoDownload.created_at)).all()
-        mapa_criados = {str(d): (int(q or 0), int(t or 0)) for d, q, t in criados_rows}
-        sparkline_ferramentas = []
-        sparkline_tipos = []
-        for i in range(7):
-            q, t = mapa_criados.get(str(inicio + timedelta(days=i)), (0, 0))
-            sparkline_ferramentas.append(q)
-            sparkline_tipos.append(t)
-
-        downloads_rows = db.session.query(ArquivoDownloadAcesso.data_acesso, func.sum(ArquivoDownloadAcesso.quantidade)).join(ArquivoDownload, ArquivoDownload.id == ArquivoDownloadAcesso.arquivo_id).filter(*base_filter, ArquivoDownloadAcesso.data_acesso >= inicio).group_by(ArquivoDownloadAcesso.data_acesso).all()
-        mapa_downloads = {d: int(q or 0) for d, q in downloads_rows}
-        sparkline_downloads = [mapa_downloads.get(inicio + timedelta(days=i), 0) for i in range(7)]
-
-        sparkline_top = [0] * 7
-        if mais_baixada:
-            top_rows = db.session.query(ArquivoDownloadAcesso.data_acesso, func.sum(ArquivoDownloadAcesso.quantidade)).filter(ArquivoDownloadAcesso.arquivo_id == mais_baixada.id, ArquivoDownloadAcesso.data_acesso >= inicio).group_by(ArquivoDownloadAcesso.data_acesso).all()
-            mapa_top = {d: int(q or 0) for d, q in top_rows}
-            sparkline_top = [mapa_top.get(inicio + timedelta(days=i), 0) for i in range(7)]
 
         q = (
             ArquivoDownload.query
@@ -1205,11 +1037,7 @@ def register_routes(app):
             top_downloads=top_downloads,
             recentes=recentes,
             paginacao=paginacao,
-            por_pagina=por_pagina,
-            sparkline_ferramentas=sparkline_ferramentas,
-            sparkline_downloads=sparkline_downloads,
-            sparkline_tipos=sparkline_tipos,
-            sparkline_top=sparkline_top
+            por_pagina=por_pagina
         )
 
     @app.route("/datasync")

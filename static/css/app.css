@@ -579,14 +579,6 @@ body {
     position: relative;
 }
 
-.scripts-kpi-card::after {
-    content: "";
-    position: absolute;
-    inset: auto 12px 10px 12px;
-    height: 28px;
-    opacity: .7;
-    background: url("data:image/svg+xml,%3Csvg width='240' height='32' viewBox='0 0 240 32' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 22 C20 5 34 30 55 15 C76 1 94 29 120 14 C144 1 160 26 184 12 C208 -1 220 18 240 7' fill='none' stroke='%230d6efd' stroke-width='3'/%3E%3C/svg%3E") center/cover no-repeat;
-}
 
 .scripts-kpi-icon {
     width: 56px;
@@ -1209,236 +1201,6 @@ body {
 
 
 /* =========================================================
-   Scripts SQL - Sparklines reais nos cards KPI
-   ========================================================= */
-.scripts-kpi-card.has-real-sparkline {
-    padding-bottom: 56px !important;
-}
-
-.scripts-kpi-card.has-real-sparkline::after {
-    display: none !important;
-}
-
-.real-sparkline {
-    position: absolute;
-    left: 18px;
-    right: 18px;
-    bottom: 14px;
-    height: 34px;
-    display: flex;
-    align-items: end;
-    gap: 5px;
-    z-index: 1;
-    pointer-events: none;
-}
-
-.real-sparkline span {
-    flex: 1;
-    min-height: 4px;
-    border-radius: 999px 999px 3px 3px;
-    background: linear-gradient(180deg, #0d6efd, #20c997);
-    opacity: .9;
-    box-shadow: 0 0 10px rgba(13, 110, 253, .25);
-}
-
-.kpi-purple .real-sparkline span {
-    background: linear-gradient(180deg, #a370f7, #6f42c1);
-}
-
-.kpi-blue .real-sparkline span {
-    background: linear-gradient(180deg, #0dcaf0, #0d6efd);
-}
-
-.kpi-green .real-sparkline span {
-    background: linear-gradient(180deg, #20c997, #198754);
-}
-
-.kpi-orange .real-sparkline span {
-    background: linear-gradient(180deg, #ffc107, #fd7e14);
-}
-
-@media (max-width: 768px) {
-    .scripts-kpi-card.has-real-sparkline {
-        padding-bottom: 50px !important;
-    }
-}
-
-
-/* =========================================================
-   Scripts SQL - Sparklines reais
-   ========================================================= */
-
-.scripts-kpi-card.has-real-sparkline {
-    padding-bottom: 56px !important;
-    overflow: visible !important;
-}
-
-.scripts-kpi-card.has-real-sparkline::after {
-    display: none !important;
-}
-
-.real-sparkline {
-    position: absolute;
-    left: 18px;
-    right: 18px;
-    bottom: 14px;
-    height: 34px;
-
-    display: flex;
-    align-items: flex-end;
-    gap: 5px;
-
-    overflow: visible !important;
-    pointer-events: auto;
-    z-index: 50;
-}
-
-.real-sparkline span {
-    flex: 1;
-    min-height: 4px;
-
-    border-radius: 999px 999px 3px 3px;
-
-    cursor: pointer;
-    position: relative;
-
-    transition: .18s;
-}
-
-.real-sparkline span:hover {
-    transform: scaleY(1.20);
-    filter: brightness(1.15);
-}
-
-/* CORES */
-
-.kpi-purple .real-sparkline span {
-    background: linear-gradient(180deg, #9b5cff, #6f42c1);
-}
-
-.kpi-blue .real-sparkline span {
-    background: linear-gradient(180deg, #20c9ff, #0d6efd);
-}
-
-.kpi-green .real-sparkline span {
-    background: linear-gradient(180deg, #20c997, #198754);
-}
-
-.kpi-orange .real-sparkline span {
-    background: linear-gradient(180deg, #ffc107, #fd7e14);
-}
-
-/* TOOLTIP */
-
-.real-sparkline span::before {
-
-    content: attr(data-tooltip);
-
-    position: absolute;
-
-    bottom: calc(100% + 12px);
-    left: 50%;
-
-    transform: translateX(-50%) translateY(6px);
-
-    background: #111827;
-
-    color: #fff;
-
-    padding: 7px 10px;
-
-    border-radius: 8px;
-
-    font-size: 11px;
-
-    font-weight: 700;
-
-    white-space: nowrap;
-
-    box-shadow: 0 12px 25px rgba(0, 0, 0, .35);
-
-    opacity: 0;
-    visibility: hidden;
-
-    transition: .18s;
-
-    z-index: 99999;
-}
-
-.real-sparkline span::after {
-
-    content: "";
-
-    position: absolute;
-
-    bottom: calc(100% + 3px);
-    left: 50%;
-
-    transform: translateX(-50%) translateY(6px);
-
-    border: 5px solid transparent;
-    border-top-color: #111827;
-
-    opacity: 0;
-    visibility: hidden;
-
-    transition: .18s;
-
-    z-index: 99999;
-}
-
-.real-sparkline span:hover::before,
-.real-sparkline span:hover::after {
-
-    opacity: 1;
-    visibility: visible;
-
-    transform: translateX(-50%) translateY(0);
-}
-
-/* primeira barra */
-
-.real-sparkline span:first-child::before {
-    left: 0;
-    transform: translateX(0) translateY(6px);
-}
-
-.real-sparkline span:first-child:hover::before {
-    transform: translateX(0) translateY(0);
-}
-
-.real-sparkline span:first-child::after {
-    left: 10px;
-}
-
-/* última barra */
-
-.real-sparkline span:last-child::before {
-    left: auto;
-    right: 0;
-    transform: translateX(0) translateY(6px);
-}
-
-.real-sparkline span:last-child:hover::before {
-    transform: translateX(0) translateY(0);
-}
-
-.real-sparkline span:last-child::after {
-    left: auto;
-    right: 10px;
-}
-
-/* RESPONSIVO */
-
-@media(max-width:768px) {
-
-    .scripts-kpi-card.has-real-sparkline {
-        padding-bottom: 50px !important;
-    }
-
-}
-
-/* =========================================================
    Correções N2 - layout moderno em cards
    ========================================================= */
 .correcoes-modern-page,
@@ -1566,12 +1328,9 @@ body {
     background: var(--bs-tertiary-bg);
     box-shadow: 0 14px 30px rgba(0, 0, 0, .08);
     position: relative;
-    overflow: visible;
+    overflow: hidden;
 }
 
-.correcoes-kpi-card.has-real-sparkline {
-    padding-bottom: 56px;
-}
 
 .correcoes-kpi-icon {
     width: 56px;
@@ -1628,118 +1387,6 @@ body {
     background: linear-gradient(135deg, #f59f00, #fd7e14);
 }
 
-.correcoes-kpi-card .real-sparkline {
-    position: absolute;
-    left: 18px;
-    right: 18px;
-    bottom: 14px;
-    height: 34px;
-    display: flex;
-    align-items: flex-end;
-    gap: 5px;
-    overflow: visible;
-    pointer-events: auto;
-    z-index: 50;
-}
-
-.correcoes-kpi-card .real-sparkline span {
-    flex: 1;
-    min-height: 4px;
-    border-radius: 999px 999px 3px 3px;
-    cursor: pointer;
-    position: relative;
-    transition: .18s;
-}
-
-.correcoes-kpi-card .real-sparkline span:hover {
-    transform: scaleY(1.20);
-    filter: brightness(1.15);
-}
-
-.correcoes-kpi-card.kpi-purple .real-sparkline span {
-    background: linear-gradient(180deg, #9b5cff, #6f42c1);
-}
-
-.correcoes-kpi-card.kpi-red .real-sparkline span {
-    background: linear-gradient(180deg, #ff6b6b, #dc3545);
-}
-
-.correcoes-kpi-card.kpi-green .real-sparkline span {
-    background: linear-gradient(180deg, #20c997, #198754);
-}
-
-.correcoes-kpi-card.kpi-orange .real-sparkline span {
-    background: linear-gradient(180deg, #ffc107, #fd7e14);
-}
-
-.correcoes-kpi-card .real-sparkline span::before {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: calc(100% + 12px);
-    left: 50%;
-    transform: translateX(-50%) translateY(6px);
-    background: #111827;
-    color: #fff;
-    padding: 7px 10px;
-    border-radius: 8px;
-    font-size: 11px;
-    font-weight: 700;
-    white-space: nowrap;
-    box-shadow: 0 12px 25px rgba(0, 0, 0, .35);
-    opacity: 0;
-    visibility: hidden;
-    transition: .18s;
-    z-index: 99999;
-}
-
-.correcoes-kpi-card .real-sparkline span::after {
-    content: "";
-    position: absolute;
-    bottom: calc(100% + 3px);
-    left: 50%;
-    transform: translateX(-50%) translateY(6px);
-    border: 5px solid transparent;
-    border-top-color: #111827;
-    opacity: 0;
-    visibility: hidden;
-    transition: .18s;
-    z-index: 99999;
-}
-
-.correcoes-kpi-card .real-sparkline span:hover::before,
-.correcoes-kpi-card .real-sparkline span:hover::after {
-    opacity: 1;
-    visibility: visible;
-    transform: translateX(-50%) translateY(0);
-}
-
-.correcoes-kpi-card .real-sparkline span:first-child::before {
-    left: 0;
-    transform: translateX(0) translateY(6px);
-}
-
-.correcoes-kpi-card .real-sparkline span:first-child:hover::before {
-    transform: translateX(0) translateY(0);
-}
-
-.correcoes-kpi-card .real-sparkline span:first-child::after {
-    left: 10px;
-}
-
-.correcoes-kpi-card .real-sparkline span:last-child::before {
-    left: auto;
-    right: 0;
-    transform: translateX(0) translateY(6px);
-}
-
-.correcoes-kpi-card .real-sparkline span:last-child:hover::before {
-    transform: translateX(0) translateY(0);
-}
-
-.correcoes-kpi-card .real-sparkline span:last-child::after {
-    left: auto;
-    right: 10px;
-}
 
 .correcoes-card-grid {
     display: grid;
@@ -2451,7 +2098,7 @@ body {
 .datasync-kpi-card {
     min-height: 118px;
     border-radius: 16px;
-    padding: 18px 18px 56px;
+    padding: 18px;
     display: flex;
     align-items: center;
     gap: 16px;
@@ -2459,7 +2106,7 @@ body {
     background: var(--bs-tertiary-bg);
     box-shadow: 0 14px 30px rgba(0, 0, 0, .08);
     position: relative;
-    overflow: visible
+    overflow: hidden
 }
 
 .datasync-kpi-icon {
@@ -2517,35 +2164,6 @@ body {
     background: linear-gradient(135deg, #6f42c1, #9b5cff)
 }
 
-.datasync-kpi-card .real-sparkline {
-    position: absolute;
-    left: 18px;
-    right: 18px;
-    bottom: 14px;
-    height: 34px;
-    display: flex;
-    align-items: flex-end;
-    gap: 5px;
-    overflow: visible;
-    pointer-events: auto;
-    z-index: 50
-}
-
-.datasync-kpi-card.kpi-blue .real-sparkline span {
-    background: linear-gradient(180deg, #3d8bfd, #0d6efd)
-}
-
-.datasync-kpi-card.kpi-cyan .real-sparkline span {
-    background: linear-gradient(180deg, #20c9ff, #0d6efd)
-}
-
-.datasync-kpi-card.kpi-green .real-sparkline span {
-    background: linear-gradient(180deg, #20c997, #198754)
-}
-
-.datasync-kpi-card.kpi-purple .real-sparkline span {
-    background: linear-gradient(180deg, #9b5cff, #6f42c1)
-}
 
 .datasync-card-grid {
     display: grid;
@@ -3218,3 +2836,23 @@ body {
 }
 
 \n
+
+/* KPIs sem gráficos decorativos */
+.scripts-kpi-card::after,
+.scripts-kpi-card::before,
+.correcoes-kpi-card::after,
+.correcoes-kpi-card::before,
+.datasync-kpi-card::after,
+.datasync-kpi-card::before,
+.real-sparkline {
+    display: none !important;
+    content: none !important;
+}
+
+.scripts-kpi-card,
+.correcoes-kpi-card,
+.datasync-kpi-card {
+    padding: 18px !important;
+    min-height: 118px;
+    overflow: hidden !important;
+}
