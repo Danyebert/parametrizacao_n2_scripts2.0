@@ -118,6 +118,31 @@
                 </div>
                 {% endfor %}
             </div>
+
+            {% if paginacao.pages > 1 %}
+            <nav class="mt-4" aria-label="Paginação das ferramentas">
+                <ul class="pagination justify-content-center flex-wrap">
+                    <li class="page-item {% if not paginacao.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('datasync' if modulo == 'datasync' else 'conversao', pagina=paginacao.prev_num if paginacao.has_prev else 1, por_pagina=por_pagina, busca=busca, tipo=tipo, ordem=ordem) }}">Anterior</a>
+                    </li>
+                    {% for numero_pagina in paginacao.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if numero_pagina %}
+                        <li class="page-item {% if numero_pagina == paginacao.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('datasync' if modulo == 'datasync' else 'conversao', pagina=numero_pagina, por_pagina=por_pagina, busca=busca, tipo=tipo, ordem=ordem) }}">{{ numero_pagina }}</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {% if not paginacao.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('datasync' if modulo == 'datasync' else 'conversao', pagina=paginacao.next_num if paginacao.has_next else paginacao.page, por_pagina=por_pagina, busca=busca, tipo=tipo, ordem=ordem) }}">Próxima</a>
+                    </li>
+                </ul>
+                <p class="text-center text-muted small mb-0">
+                    Exibindo {{ paginacao.first }}–{{ paginacao.last }} de {{ paginacao.total }} ferramentas
+                </p>
+            </nav>
+            {% endif %}
         </div>
 
         <aside class="datasync-side">

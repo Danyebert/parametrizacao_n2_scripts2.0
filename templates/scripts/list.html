@@ -191,7 +191,8 @@
                     </div>
 
                     <div class="script-card-metrics">
-                        <span><i class="bi bi-diagram-3"></i> {{ i.consultas|length }} consulta{{ 's' if i.consultas|length != 1 else '' }}</span>
+                        {% set total_item_consultas = contagens_consultas.get(i.id, 0) %}
+                        <span><i class="bi bi-diagram-3"></i> {{ total_item_consultas }} consulta{{ 's' if total_item_consultas != 1 else '' }}</span>
                         <span><i class="bi bi-eye"></i> {{ i.acessos or 0 }} acesso{{ 's' if (i.acessos or 0) != 1 else '' }}</span>
                         <span><i class="bi bi-clock-history"></i> {{ i.updated_at.strftime('%d/%m/%Y') if i.updated_at else '-' }}</span>
                     </div>
@@ -263,6 +264,72 @@
                 </div>
                 {% endfor %}
             </div>
+
+            {% if paginacao.pages > 1 %}
+            <nav class="mt-4" aria-label="Paginação dos scripts">
+                <ul class="pagination justify-content-center flex-wrap">
+                    <li class="page-item {% if not paginacao.has_prev %}disabled{% endif %}">
+                        <a class="page-link"
+                           href="{{ url_for(
+                               'scripts_listar',
+                               pagina=paginacao.prev_num if paginacao.has_prev else 1,
+                               por_pagina=por_pagina,
+                               busca=busca,
+                               banco=banco,
+                               ordem=ordem
+                           ) }}">
+                            Anterior
+                        </a>
+                    </li>
+
+                    {% for numero_pagina in paginacao.iter_pages(
+                        left_edge=1,
+                        right_edge=1,
+                        left_current=2,
+                        right_current=2
+                    ) %}
+                        {% if numero_pagina %}
+                        <li class="page-item {% if numero_pagina == paginacao.page %}active{% endif %}">
+                            <a class="page-link"
+                               href="{{ url_for(
+                                   'scripts_listar',
+                                   pagina=numero_pagina,
+                                   por_pagina=por_pagina,
+                                   busca=busca,
+                                   banco=banco,
+                                   ordem=ordem
+                               ) }}">
+                                {{ numero_pagina }}
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">…</span>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    <li class="page-item {% if not paginacao.has_next %}disabled{% endif %}">
+                        <a class="page-link"
+                           href="{{ url_for(
+                               'scripts_listar',
+                               pagina=paginacao.next_num if paginacao.has_next else paginacao.page,
+                               por_pagina=por_pagina,
+                               busca=busca,
+                               banco=banco,
+                               ordem=ordem
+                           ) }}">
+                            Próxima
+                        </a>
+                    </li>
+                </ul>
+
+                <p class="text-center text-muted small mb-0">
+                    Exibindo {{ paginacao.first }}–{{ paginacao.last }}
+                    de {{ paginacao.total }} scripts
+                </p>
+            </nav>
+            {% endif %}
         </div>
 
         <aside class="scripts-side">
@@ -330,11 +397,11 @@
                 </div>
 
                 <div class="top-list">
-                    {% for s in top_consultas %}
+                    {% for s, quantidade_consultas in top_consultas %}
                     <a href="{{ url_for('scripts_ver', id=s.id) }}">
                         <span class="rank">{{ loop.index }}</span>
                         <span>{{ s.titulo }}</span>
-                        <strong>{{ s.consultas|length }}</strong>
+                        <strong>{{ quantidade_consultas }}</strong>
                     </a>
                     {% else %}
                     <p class="text-muted mb-0">Nenhum script cadastrado.</p>

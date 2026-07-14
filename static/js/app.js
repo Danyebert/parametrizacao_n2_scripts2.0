@@ -1,395 +1,380 @@
 // ===========================================
-// Parametrização N2 Scripts
-// app.js
+// Parametrização N2 - app.js
 // ===========================================
 
-// ----------------------------
-// Tema
-// ----------------------------
 const html = document.documentElement;
+const editoresSQL = [];
+const IDENTIFICADOR_HIST_KEY =
+    "parametrizacao_n2_identificador_historico";
 
-const temaSalvo = localStorage.getItem("theme");
 
-if (temaSalvo) {
-    html.setAttribute("data-bs-theme", temaSalvo);
+// ===========================================
+// Tema
+// ===========================================
+
+function temaEditorAtual() {
+    return html.getAttribute("data-bs-theme") === "dark"
+        ? "darcula"
+        : "default";
 }
 
-document.getElementById("toggleTheme")?.addEventListener("click", () => {
 
+function carregarTema() {
+    const temaSalvo = localStorage.getItem("theme");
+
+    if (temaSalvo) {
+        html.setAttribute("data-bs-theme", temaSalvo);
+    }
+}
+
+
+function alterarTemaEditores() {
+    editoresSQL.forEach(editor => {
+        editor.setOption("theme", temaEditorAtual());
+    });
+}
+
+
+function alternarTema() {
     const novoTema =
         html.getAttribute("data-bs-theme") === "dark"
             ? "light"
             : "dark";
 
     html.setAttribute("data-bs-theme", novoTema);
-
     localStorage.setItem("theme", novoTema);
 
     alterarTemaEditores();
-});
+}
 
-// ----------------------------
+
+// ===========================================
 // Sidebar
-// ----------------------------
+// ===========================================
 
-document.getElementById("toggleSidebar")?.addEventListener("click", () => {
-
+function alternarSidebar() {
     const sidebar = document.getElementById("sidebar");
+
+    if (!sidebar) {
+        return;
+    }
 
     if (window.innerWidth < 900) {
         sidebar.classList.toggle("show");
     } else {
         sidebar.classList.toggle("collapsed");
     }
-
-});
-
-// ----------------------------
-// CodeMirror
-// ----------------------------
-
-const editoresSQL = [];
-
-function temaEditorAtual() {
-
-    return html.getAttribute("data-bs-theme") === "dark"
-        ? "darcula"
-        : "default";
-
 }
 
-function initCodeMirror(selector = ".codemirror-sql") {
 
-    document.querySelectorAll(selector).forEach(textarea => {
+// ===========================================
+// Área de transferência
+// ===========================================
 
-        if (textarea.dataset.cm) return;
-
-        textarea.dataset.cm = "1";
-
-        const editor = CodeMirror.fromTextArea(textarea, {
-
-            mode: "text/x-sql",
-
-            theme: temaEditorAtual(),
-
-            lineNumbers: true,
-
-            lineWrapping: true,
-
-            indentUnit: 4,
-
-            tabSize: 4,
-
-            indentWithTabs: false,
-
-            smartIndent: true,
-
-            matchBrackets: true,
-
-            autoCloseBrackets: true,
-
-            styleActiveLine: true,
-
-            foldGutter: true,
-
-            gutters: [
-                "CodeMirror-linenumbers",
-                "CodeMirror-foldgutter"
-            ],
-
-            extraKeys: {
-
-                "F11": function(cm) {
-                    cm.setOption("fullScreen", !cm.getOption("fullScreen"));
-                },
-
-                "Esc": function(cm) {
-                    if (cm.getOption("fullScreen")) {
-                        cm.setOption("fullScreen", false);
-                    }
-                }
-
-            }
-
-        });
-
-        editoresSQL.push(editor);
-
-    });
-
-}
-
-function alterarTemaEditores() {
-
-    editoresSQL.forEach(editor => {
-
-        editor.setOption(
-            "theme",
-            temaEditorAtual()
-        );
-
-    });
-
-}
-
-// ----------------------------
-// SQL Formatter
-// ----------------------------
-
-function getDialetoSQL() {
-
-    const banco =
-        document.querySelector('[name="tipo_banco"]')?.value;
-
-    const mapa = {
-
-        "SQL Server": "transactsql",
-
-        "MySQL": "mysql",
-
-        "PostgreSQL": "postgresql",
-
-        "Oracle": "plsql",
-
-        "SQLite": "sqlite",
-
-        "Firebird": "sql",
-
-        "Access": "sql"
-
-    };
-
-    return mapa[banco] || "sql";
-
-}
-
-function formatarSQL(botao) {
-
-    const consulta = botao.closest(".consulta");
-
-    const editor =
-        consulta.querySelector(".CodeMirror").CodeMirror;
-
-    try {
-
-        editor.setValue(
-
-            sqlFormatter.format(
-
-                editor.getValue(),
-
-                {
-
-                    language: getDialetoSQL(),
-
-                    keywordCase: "upper",
-
-                    indentStyle: "standard",
-
-                    linesBetweenQueries: 2
-
-                }
-
-            )
-
-        );
-
-        editor.refresh();
-
-    } catch (e) {
-
-        console.error(e);
-
-        alert("Erro ao formatar SQL.");
-
+async function copiarParaAreaTransferencia(texto) {
+    if (!texto) {
+        throw new Error("Não há conteúdo para copiar.");
     }
 
+    if (
+        navigator.clipboard &&
+        window.isSecureContext
+    ) {
+        await navigator.clipboard.writeText(texto);
+        return;
+    }
+
+    const textarea = document.createElement("textarea");
+
+    textarea.value = texto;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.top = "-9999px";
+
+    document.body.appendChild(textarea);
+
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(
+        0,
+        textarea.value.length
+    );
+
+    let copiado = false;
+
+    try {
+        copiado = document.execCommand("copy");
+    } finally {
+        textarea.remove();
+    }
+
+    if (!copiado) {
+        throw new Error(
+            "O navegador bloqueou a cópia."
+        );
+    }
 }
 
-function copiarSQL(botao) {
 
-    const consulta = botao.closest(".consulta");
+// ===========================================
+// CodeMirror
+// ===========================================
 
-    const editor =
-        consulta.querySelector(".CodeMirror").CodeMirror;
+function initCodeMirror(
+    selector = ".codemirror-sql"
+) {
+    if (typeof CodeMirror === "undefined") {
+        return;
+    }
 
-    navigator.clipboard.writeText(editor.getValue());
-
-    const texto = botao.innerHTML;
-
-    botao.innerHTML =
-        '<i class="bi bi-check2"></i> Copiado';
-
-    setTimeout(() => {
-
-        botao.innerHTML = texto;
-
-    }, 1500);
-
-}
-
-function telaCheiaSQL(botao) {
-
-    const consulta = botao.closest(".consulta");
-
-    consulta.classList.toggle("sql-fullscreen");
-
-    const editor =
-        consulta.querySelector(".CodeMirror").CodeMirror;
-
-    setTimeout(() => {
-
-        editor.refresh();
-
-    }, 200);
-
-}
-
-// ----------------------------
-// Pesquisa dinâmica Scripts
-// ----------------------------
-
-function pesquisarScripts() {
-
-    const campo = document.getElementById("pesquisaScripts");
-
-    if (!campo) return;
-
-    const filtro = campo.value.toLowerCase();
-
-    document.querySelectorAll(".script-card").forEach(card => {
-
-        card.style.display =
-            card.innerText.toLowerCase().includes(filtro)
-                ? ""
-                : "none";
-
-    });
-
-}
-
-// ----------------------------
-// Filtro Banco
-// ----------------------------
-
-function filtrarBanco() {
-
-    const select = document.getElementById("filtroBanco");
-
-    if (!select) return;
-
-    const valor = select.value;
-
-    document.querySelectorAll(".script-card").forEach(card => {
-
-        if (
-            valor === "" ||
-            card.dataset.banco === valor
-        ) {
-
-            card.style.display = "";
-
-        } else {
-
-            card.style.display = "none";
-
-        }
-
-    });
-
-}
-
-// ----------------------------
-// Contadores animados
-// ----------------------------
-
-function animarContadores() {
-
-    document.querySelectorAll(".counter").forEach(counter => {
-
-        const destino =
-            parseInt(counter.dataset.value);
-
-        if (isNaN(destino)) return;
-
-        let atual = 0;
-
-        const incremento =
-            Math.max(1, Math.ceil(destino / 50));
-
-        const timer = setInterval(() => {
-
-            atual += incremento;
-
-            if (atual >= destino) {
-
-                atual = destino;
-
-                clearInterval(timer);
-
+    document
+        .querySelectorAll(selector)
+        .forEach(textarea => {
+            if (textarea.dataset.cm === "1") {
+                return;
             }
 
-            counter.innerText = atual;
+            textarea.dataset.cm = "1";
 
-        }, 20);
+            const editor =
+                CodeMirror.fromTextArea(
+                    textarea,
+                    {
+                        mode: "text/x-sql",
+                        theme: temaEditorAtual(),
+                        lineNumbers: true,
+                        lineWrapping: true,
+                        indentUnit: 4,
+                        tabSize: 4,
+                        indentWithTabs: false,
+                        smartIndent: true,
+                        matchBrackets: true,
+                        autoCloseBrackets: true,
+                        styleActiveLine: true,
+                        foldGutter: true,
 
-    });
+                        gutters: [
+                            "CodeMirror-linenumbers",
+                            "CodeMirror-foldgutter"
+                        ],
 
+                        extraKeys: {
+                            F11(cm) {
+                                cm.setOption(
+                                    "fullScreen",
+                                    !cm.getOption(
+                                        "fullScreen"
+                                    )
+                                );
+                            },
+
+                            Esc(cm) {
+                                if (
+                                    cm.getOption(
+                                        "fullScreen"
+                                    )
+                                ) {
+                                    cm.setOption(
+                                        "fullScreen",
+                                        false
+                                    );
+                                }
+                            }
+                        }
+                    }
+                );
+
+            editoresSQL.push(editor);
+        });
 }
 
-// ----------------------------
-// Hover cards
-// ----------------------------
 
-document.addEventListener("mouseover", e => {
+function localizarEditorSQL(botao) {
+    const consulta =
+        botao?.closest(".consulta");
 
-    const card = e.target.closest(".script-card");
+    if (!consulta) {
+        return null;
+    }
 
-    if (!card) return;
+    const elemento =
+        consulta.querySelector(
+            ".CodeMirror"
+        );
 
-    card.classList.add("hover");
+    return elemento?.CodeMirror || null;
+}
 
-});
 
-document.addEventListener("mouseout", e => {
+function getDialetoSQL() {
+    const banco =
+        document.querySelector(
+            '[name="tipo_banco"]'
+        )?.value;
 
-    const card = e.target.closest(".script-card");
+    const dialetos = {
+        "SQL Server": "transactsql",
+        MySQL: "mysql",
+        PostgreSQL: "postgresql",
+        Oracle: "plsql",
+        SQLite: "sqlite",
+        Firebird: "sql",
+        Access: "sql"
+    };
 
-    if (!card) return;
+    return dialetos[banco] || "sql";
+}
 
-    card.classList.remove("hover");
 
-});
+function formatarSQL(botao) {
+    const editor =
+        localizarEditorSQL(botao);
 
-// ----------------------------
-// Inicialização
-// ----------------------------
+    if (!editor) {
+        alert("Editor SQL não encontrado.");
+        return;
+    }
 
-document.addEventListener("DOMContentLoaded", () => {
+    if (
+        typeof sqlFormatter === "undefined"
+    ) {
+        alert(
+            "O formatador SQL não foi carregado."
+        );
+        return;
+    }
 
-    initCodeMirror();
+    try {
+        const formatado =
+            sqlFormatter.format(
+                editor.getValue(),
+                {
+                    language: getDialetoSQL(),
+                    keywordCase: "upper",
+                    indentStyle: "standard",
+                    linesBetweenQueries: 2
+                }
+            );
 
-    animarContadores();
+        editor.setValue(formatado);
+        editor.refresh();
+    } catch (erro) {
+        console.error(
+            "Erro ao formatar SQL:",
+            erro
+        );
 
-    inicializarGeradorIdentificador();
+        alert("Erro ao formatar SQL.");
+    }
+}
 
+
+async function copiarSQL(botao) {
+    const editor =
+        localizarEditorSQL(botao);
+
+    if (!editor) {
+        alert("Editor SQL não encontrado.");
+        return;
+    }
+
+    const textoOriginal =
+        botao.innerHTML;
+
+    try {
+        await copiarParaAreaTransferencia(
+            editor.getValue()
+        );
+
+        botao.innerHTML =
+            '<i class="bi bi-check2"></i> Copiado';
+
+        setTimeout(() => {
+            botao.innerHTML =
+                textoOriginal;
+        }, 1500);
+    } catch (erro) {
+        console.error(
+            "Erro ao copiar SQL:",
+            erro
+        );
+
+        alert(
+            "Não foi possível copiar o SQL."
+        );
+    }
+}
+
+
+function telaCheiaSQL(botao) {
+    const consulta =
+        botao?.closest(".consulta");
+
+    const editor =
+        localizarEditorSQL(botao);
+
+    if (!consulta || !editor) {
+        return;
+    }
+
+    consulta.classList.toggle(
+        "sql-fullscreen"
+    );
+
+    setTimeout(() => {
+        editor.refresh();
+    }, 200);
+}
+
+
+// ===========================================
+// Contadores animados
+// ===========================================
+
+function animarContadores() {
     document
-        .getElementById("pesquisaScripts")
-        ?.addEventListener("keyup", pesquisarScripts);
+        .querySelectorAll(".counter")
+        .forEach(counter => {
+            const destino =
+                Number.parseInt(
+                    counter.dataset.value,
+                    10
+                );
 
-    document
-        .getElementById("filtroBanco")
-        ?.addEventListener("change", filtrarBanco);
+            if (
+                Number.isNaN(destino)
+            ) {
+                return;
+            }
 
-});
+            let atual = 0;
+
+            const incremento =
+                Math.max(
+                    1,
+                    Math.ceil(destino / 50)
+                );
+
+            const timer =
+                setInterval(() => {
+                    atual += incremento;
+
+                    if (atual >= destino) {
+                        atual = destino;
+                        clearInterval(timer);
+                    }
+
+                    counter.textContent =
+                        atual;
+                }, 20);
+        });
+}
+
 
 // ===========================================
 // Gerador de Identificador
 // ===========================================
-
-const IDENTIFICADOR_HIST_KEY =
-    "parametrizacao_n2_identificador_historico";
-
 
 function getIdentificadorElement(id) {
     return document.getElementById(id);
@@ -398,13 +383,22 @@ function getIdentificadorElement(id) {
 
 function carregarHistoricoIdentificador() {
     try {
-        const salvo = localStorage.getItem(IDENTIFICADOR_HIST_KEY);
-        const historico = salvo ? JSON.parse(salvo) : [];
+        const salvo =
+            localStorage.getItem(
+                IDENTIFICADOR_HIST_KEY
+            );
 
-        return Array.isArray(historico) ? historico : [];
+        const historico =
+            salvo
+                ? JSON.parse(salvo)
+                : [];
+
+        return Array.isArray(historico)
+            ? historico
+            : [];
     } catch (erro) {
         console.error(
-            "Erro ao carregar histórico de identificadores:",
+            "Erro ao carregar histórico:",
             erro
         );
 
@@ -413,7 +407,9 @@ function carregarHistoricoIdentificador() {
 }
 
 
-function salvarHistoricoIdentificador(historico) {
+function salvarHistoricoIdentificador(
+    historico
+) {
     localStorage.setItem(
         IDENTIFICADOR_HIST_KEY,
         JSON.stringify(historico)
@@ -436,32 +432,41 @@ function mostrarToastIdentificador(
     tipo = "success"
 ) {
     let toast =
-        getIdentificadorElement("identificadorToast");
+        getIdentificadorElement(
+            "identificadorToast"
+        );
 
     if (!toast) {
-        toast = document.createElement("div");
+        toast =
+            document.createElement("div");
+
         toast.id = "identificadorToast";
-        toast.className = "identificador-toast";
+        toast.className =
+            "identificador-toast";
 
         document.body.appendChild(toast);
     }
+
+    const icone =
+        tipo === "danger"
+            ? "bi-exclamation-triangle"
+            : "bi-check-circle";
 
     toast.className =
         `identificador-toast show ${tipo}`;
 
     toast.innerHTML = `
-        <i class="bi ${
-            tipo === "danger"
-                ? "bi-exclamation-triangle"
-                : "bi-check-circle"
-        }"></i>
-
+        <i class="bi ${icone}"></i>
         <span>
-            ${escaparHtmlIdentificador(mensagem)}
+            ${escaparHtmlIdentificador(
+                mensagem
+            )}
         </span>
     `;
 
-    clearTimeout(window.identificadorToastTimer);
+    clearTimeout(
+        window.identificadorToastTimer
+    );
 
     window.identificadorToastTimer =
         setTimeout(() => {
@@ -484,11 +489,18 @@ async function copiarTextoIdentificador(
     }
 
     try {
-        await navigator.clipboard.writeText(texto);
+        await copiarParaAreaTransferencia(
+            texto
+        );
 
-        mostrarToastIdentificador(mensagem);
+        mostrarToastIdentificador(
+            mensagem
+        );
     } catch (erro) {
-        console.error("Erro ao copiar:", erro);
+        console.error(
+            "Erro ao copiar:",
+            erro
+        );
 
         mostrarToastIdentificador(
             "Não foi possível copiar.",
@@ -503,38 +515,60 @@ function atualizarMetricasIdentificador() {
         carregarHistoricoIdentificador();
 
     const hoje =
-        new Date().toLocaleDateString("pt-BR");
+        new Date()
+            .toLocaleDateString("pt-BR");
 
-    const total =
-        getIdentificadorElement("metricTotalGerados");
+    const totalGerados =
+        getIdentificadorElement(
+            "metricTotalGerados"
+        ) ||
+        getIdentificadorElement(
+            "identificadorGerados"
+        );
 
-    const hojeEl =
-        getIdentificadorElement("metricGeradosHoje");
+    const geradosHoje =
+        getIdentificadorElement(
+            "metricGeradosHoje"
+        );
 
-    const historicoEl =
-        getIdentificadorElement("metricHistorico");
+    const totalHistorico =
+        getIdentificadorElement(
+            "metricHistorico"
+        ) ||
+        getIdentificadorElement(
+            "identificadorHistoricoTotal"
+        );
 
     const ultimo =
-        getIdentificadorElement("metricUltimo");
+        getIdentificadorElement(
+            "metricUltimo"
+        ) ||
+        getIdentificadorElement(
+            "identificadorUltimoNumero"
+        );
 
-    if (total) {
-        total.textContent = historico.length;
+    if (totalGerados) {
+        totalGerados.textContent =
+            historico.length;
     }
 
-    if (hojeEl) {
-        hojeEl.textContent =
+    if (geradosHoje) {
+        geradosHoje.textContent =
             historico.filter(
                 item => item.data === hoje
             ).length;
     }
 
-    if (historicoEl) {
-        historicoEl.textContent = historico.length;
+    if (totalHistorico) {
+        totalHistorico.textContent =
+            historico.length;
     }
 
     if (ultimo) {
         ultimo.textContent =
-            historico[0]?.identificador || "Nenhum";
+            historico[0]?.numero ||
+            historico[0]?.identificador ||
+            "—";
     }
 }
 
@@ -543,9 +577,13 @@ function renderHistoricoIdentificador() {
     const lista =
         getIdentificadorElement(
             "historicoIdentificadores"
+        ) ||
+        getIdentificadorElement(
+            "historicoIdentificador"
         );
 
     if (!lista) {
+        atualizarMetricasIdentificador();
         return;
     }
 
@@ -554,95 +592,96 @@ function renderHistoricoIdentificador() {
 
     if (!historico.length) {
         lista.innerHTML = `
-            <div class="identificador-empty">
+            <div class="identificador-history-empty">
                 <i class="bi bi-clock-history"></i>
-
-                <h6>
-                    Nenhum identificador gerado
-                </h6>
-
                 <p>
-                    Os resultados aparecerão aqui
-                    automaticamente.
+                    Nenhum identificador gerado.
                 </p>
             </div>
         `;
 
         atualizarMetricasIdentificador();
-
         return;
     }
 
     lista.innerHTML =
-        historico.map((item, indice) => `
-            <article class="identificador-history-item">
+        historico
+            .map((item, indice) => `
+                <article
+                    class="identificador-history-item"
+                >
+                    <div
+                        class="identificador-history-main"
+                    >
+                        <div
+                            class="identificador-history-number"
+                        >
+                            ${escaparHtmlIdentificador(
+                                item.numero ||
+                                "Sem número"
+                            )}
+                        </div>
 
-                <div class="identificador-history-main">
+                        <div
+                            class="identificador-history-value"
+                        >
+                            ${escaparHtmlIdentificador(
+                                item.identificador ||
+                                ""
+                            )}
+                        </div>
 
-                    <div class="identificador-history-number">
-                        ${
-                            escaparHtmlIdentificador(
-                                item.numero || "Sem número"
-                            )
-                        }
-                    </div>
-
-                    <div class="identificador-history-value">
-                        ${
-                            escaparHtmlIdentificador(
-                                item.identificador || ""
-                            )
-                        }
-                    </div>
-
-                    <div class="identificador-history-meta">
-
-                        <span>
-                            <i class="bi bi-calendar3"></i>
-
-                            ${
-                                escaparHtmlIdentificador(
+                        <div
+                            class="identificador-history-meta"
+                        >
+                            <span>
+                                <i
+                                    class="bi bi-calendar3"
+                                ></i>
+                                ${escaparHtmlIdentificador(
                                     item.data || ""
-                                )
-                            }
-                        </span>
+                                )}
+                            </span>
 
-                        <span>
-                            <i class="bi bi-clock"></i>
-
-                            ${
-                                escaparHtmlIdentificador(
+                            <span>
+                                <i
+                                    class="bi bi-clock"
+                                ></i>
+                                ${escaparHtmlIdentificador(
                                     item.hora || ""
-                                )
-                            }
-                        </span>
-
+                                )}
+                            </span>
+                        </div>
                     </div>
-                </div>
 
-                <div class="identificador-history-actions">
+                    <div
+                        class="identificador-history-actions"
+                    >
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-outline-primary"
+                            onclick="copiarHistoricoIdentificador(${indice})"
+                            title="Copiar"
+                        >
+                            <i
+                                class="bi bi-clipboard"
+                            ></i>
+                        </button>
 
-                    <button
-                        type="button"
-                        class="btn btn-sm btn-outline-primary"
-                        onclick="copiarHistoricoIdentificador(${indice})"
-                        title="Copiar">
-
-                        <i class="bi bi-clipboard"></i>
-                    </button>
-
-                    <button
-                        type="button"
-                        class="btn btn-sm btn-outline-danger"
-                        onclick="removerHistoricoIdentificador(${indice})"
-                        title="Remover">
-
-                        <i class="bi bi-trash"></i>
-                    </button>
-
-                </div>
-            </article>
-        `).join("");
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-outline-danger"
+                            onclick="removerHistoricoIdentificador(${indice})"
+                            title="Remover"
+                        >
+                            <i
+                                class="bi bi-trash"
+                            ></i>
+                        </button>
+                    </div>
+                </article>
+            `)
+            .join("");
 
     atualizarMetricasIdentificador();
 }
@@ -669,11 +708,16 @@ async function gerarIdentificador() {
             "btnGerarIdentificador"
         );
 
-    if (!linha || !numero || !identificador) {
+    if (
+        !linha ||
+        !numero ||
+        !identificador
+    ) {
         return;
     }
 
-    const valor = linha.value.trim();
+    const valor =
+        linha.value.trim();
 
     if (!valor) {
         linha.focus();
@@ -694,27 +738,29 @@ async function gerarIdentificador() {
 
         botao.innerHTML = `
             <span
-                class="spinner-border spinner-border-sm">
-            </span>
-
+                class="spinner-border spinner-border-sm"
+            ></span>
             Gerando...
         `;
     }
 
     try {
         const resposta =
-            await fetch("/api/identificador", {
-                method: "POST",
+            await fetch(
+                "/api/identificador",
+                {
+                    method: "POST",
 
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
 
-                body: JSON.stringify({
-                    linha: valor
-                })
-            });
+                    body: JSON.stringify({
+                        linha: valor
+                    })
+                }
+            );
 
         const dados =
             await resposta.json();
@@ -734,7 +780,7 @@ async function gerarIdentificador() {
 
         if (!dados.identificador) {
             throw new Error(
-                "Não foi possível identificar os dados informados."
+                "Não foi possível gerar o identificador."
             );
         }
 
@@ -754,7 +800,9 @@ async function gerarIdentificador() {
                 valor,
 
             data:
-                agora.toLocaleDateString("pt-BR"),
+                agora.toLocaleDateString(
+                    "pt-BR"
+                ),
 
             hora:
                 agora.toLocaleTimeString(
@@ -850,9 +898,14 @@ function copiarAmbosIdentificador() {
 }
 
 
-function copiarHistoricoIdentificador(indice) {
+function copiarHistoricoIdentificador(
+    indice
+) {
+    const historico =
+        carregarHistoricoIdentificador();
+
     const item =
-        carregarHistoricoIdentificador()[indice];
+        historico[indice];
 
     if (!item) {
         return;
@@ -865,13 +918,17 @@ function copiarHistoricoIdentificador(indice) {
 }
 
 
-function removerHistoricoIdentificador(indice) {
+function removerHistoricoIdentificador(
+    indice
+) {
     const historico =
         carregarHistoricoIdentificador();
 
     historico.splice(indice, 1);
 
-    salvarHistoricoIdentificador(historico);
+    salvarHistoricoIdentificador(
+        historico
+    );
 
     renderHistoricoIdentificador();
 
@@ -894,12 +951,11 @@ function limparHistoricoIdentificador() {
         return;
     }
 
-    const confirmou =
-        confirm(
-            "Deseja limpar todo o histórico de identificadores?"
-        );
-
-    if (!confirmou) {
+    if (
+        !confirm(
+            "Deseja limpar todo o histórico?"
+        )
+    ) {
         return;
     }
 
@@ -963,7 +1019,6 @@ function exportarHistoricoIdentificador() {
     document.body.appendChild(link);
 
     link.click();
-
     link.remove();
 
     URL.revokeObjectURL(url);
@@ -1017,6 +1072,9 @@ function atualizarContadorCaracteresIdentificador() {
     const contador =
         getIdentificadorElement(
             "contadorCaracteresIdentificador"
+        ) ||
+        getIdentificadorElement(
+            "identificadorCaracteres"
         );
 
     if (linha && contador) {
@@ -1037,7 +1095,6 @@ function inicializarGeradorIdentificador() {
     }
 
     renderHistoricoIdentificador();
-
     atualizarContadorCaracteresIdentificador();
 
     linha.addEventListener(
@@ -1056,9 +1113,42 @@ function inicializarGeradorIdentificador() {
                 evento.key === "Enter"
             ) {
                 evento.preventDefault();
-
                 gerarIdentificador();
             }
         }
     );
 }
+
+
+// ===========================================
+// Inicialização
+// ===========================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+        carregarTema();
+
+        document
+            .getElementById(
+                "toggleTheme"
+            )
+            ?.addEventListener(
+                "click",
+                alternarTema
+            );
+
+        document
+            .getElementById(
+                "toggleSidebar"
+            )
+            ?.addEventListener(
+                "click",
+                alternarSidebar
+            );
+
+        initCodeMirror();
+        animarContadores();
+        inicializarGeradorIdentificador();
+    }
+);

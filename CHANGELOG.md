@@ -227,3 +227,27 @@ Todos os módulos principais agora seguem a mesma identidade visual.
 ### Geral
 - Revisão da estrutura do `app.py`.
 - Ajustes para maior estabilidade em produção.
+
+
+## v2.7.4 - 14/07/2026
+## Performance
+✅ Paginação em Scripts.
+✅ Paginação em Correções N2.
+✅ Paginação em DataSync.
+✅ Redução de consultas ao PostgreSQL.
+✅ Uso de load_only() para carregar apenas os campos necessários.
+✅ Otimização das métricas do Dashboard.
+✅ Rankings calculados diretamente no banco.
+✅ Redução de consultas N+1.
+✅ Melhor gerenciamento de conexões SQLAlchemy.
+✅ Melhor estabilidade na Vercel.
+## JavaScript
+✅ Limpeza do app.js.
+✅ Remoção de código legado e duplicado.
+✅ Remoção dos filtros locais substituídos pelo backend.
+✅ Correção das funções de cópia com fallback para navegadores que bloqueiam navigator.clipboard.
+✅ Organização do código para facilitar manutenção.
+## Interface
+✅ Mantida a identidade visual.
+✅ Preservados filtros e paginação entre navegações.
+✅ Melhor tempo de carregamento das telas.

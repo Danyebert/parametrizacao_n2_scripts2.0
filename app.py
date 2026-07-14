@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import or_, func, text, case
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -307,7 +307,7 @@ def register_routes(app):
     @app.context_processor
     def inject_globals():
         return {"is_admin": is_admin(),
-                "APP_VERSION": "2.7.3",
+                "APP_VERSION": "2.7.4",
                 "APP_BUILD": "2026-07-13",
                 "APP_COPYRIGHT": "© 2026 Parametrização N2"}
 
@@ -318,34 +318,63 @@ def register_routes(app):
         except (TypeError, ValueError):
             dias = 7
 
-        contagens = db.session.query(
-            db.session.query(CorrecaoN2.id).filter(CorrecaoN2.deleted_at.is_(None)).count(),
-            db.session.query(ScriptSQL.id).filter(ScriptSQL.deleted_at.is_(None)).count(),
-            db.session.query(ArquivoDownload.id).filter(ArquivoDownload.deleted_at.is_(None)).count(),
+        resumo = db.session.query(
+            db.session.query(func.count(CorrecaoN2.id))
+            .filter(CorrecaoN2.deleted_at.is_(None))
+            .scalar_subquery(),
+            db.session.query(func.count(ScriptSQL.id))
+            .filter(ScriptSQL.deleted_at.is_(None))
+            .scalar_subquery(),
+            db.session.query(func.count(ArquivoDownload.id))
+            .filter(ArquivoDownload.deleted_at.is_(None))
+            .scalar_subquery(),
+            db.session.query(func.coalesce(func.sum(ArquivoDownload.downloads), 0))
+            .filter(ArquivoDownload.deleted_at.is_(None))
+            .scalar_subquery(),
         ).first()
 
-        ultimas_correcoes = CorrecaoN2.query.filter(
-            CorrecaoN2.deleted_at.is_(None)
-        ).order_by(CorrecaoN2.updated_at.desc()).limit(5).all()
+        ultimas_correcoes = (
+            CorrecaoN2.query
+            .options(
+                load_only(
+                    CorrecaoN2.id,
+                    CorrecaoN2.titulo,
+                    CorrecaoN2.criticidade,
+                    CorrecaoN2.updated_at
+                )
+            )
+            .filter(CorrecaoN2.deleted_at.is_(None))
+            .order_by(CorrecaoN2.updated_at.desc())
+            .limit(5)
+            .all()
+        )
 
-        ultimos_scripts = ScriptSQL.query.filter(
-            ScriptSQL.deleted_at.is_(None)
-        ).order_by(ScriptSQL.updated_at.desc()).limit(5).all()
-
-        arquivos_mais_baixados = ArquivoDownload.query.filter(
-            ArquivoDownload.deleted_at.is_(None)
-        ).order_by(ArquivoDownload.downloads.desc()).limit(5).all()
+        ultimos_scripts = (
+            ScriptSQL.query
+            .options(
+                load_only(
+                    ScriptSQL.id,
+                    ScriptSQL.titulo,
+                    ScriptSQL.tipo_banco,
+                    ScriptSQL.updated_at
+                )
+            )
+            .filter(ScriptSQL.deleted_at.is_(None))
+            .order_by(ScriptSQL.updated_at.desc())
+            .limit(5)
+            .all()
+        )
 
         return render_template(
             "dashboard.html",
-            correcoes=contagens[0] if contagens else 0,
-            scripts=contagens[1] if contagens else 0,
+            correcoes=int(resumo[0] or 0),
+            scripts=int(resumo[1] or 0),
             bancos=0,
-            downloads=contagens[2] if contagens else 0,
+            downloads=int(resumo[2] or 0),
+            total_downloads=int(resumo[3] or 0),
             dias=dias,
             ultimas_correcoes=ultimas_correcoes,
             ultimos_scripts=ultimos_scripts,
-            arquivos_mais_baixados=arquivos_mais_baixados,
         )
 
     @app.route("/login", methods=["GET", "POST"])
@@ -385,6 +414,11 @@ def register_routes(app):
         categoria = (request.args.get("categoria") or "").strip()
         criticidade = (request.args.get("criticidade") or "").strip()
         ordem = (request.args.get("ordem") or "recentes").strip()
+
+        pagina = request.args.get("pagina", 1, type=int)
+        por_pagina = request.args.get("por_pagina", 12, type=int)
+        pagina = max(pagina or 1, 1)
+        por_pagina = min(max(por_pagina or 12, 6), 48)
 
         hoje = datetime.utcnow().date()
         inicio = hoje - timedelta(days=6)
@@ -450,7 +484,25 @@ def register_routes(app):
         mapa_acessos = {d: int(q or 0) for d, q in acessos_rows}
         sparkline_acessos = [mapa_acessos.get(inicio + timedelta(days=i), 0) for i in range(7)]
 
-        q = CorrecaoN2.query.filter(base_filter)
+        q = (
+            CorrecaoN2.query
+            .options(
+                load_only(
+                    CorrecaoN2.id,
+                    CorrecaoN2.titulo,
+                    CorrecaoN2.sistema,
+                    CorrecaoN2.categoria,
+                    CorrecaoN2.criticidade,
+                    CorrecaoN2.erro,
+                    CorrecaoN2.causa,
+                    CorrecaoN2.correcao,
+                    CorrecaoN2.acessos,
+                    CorrecaoN2.created_at,
+                    CorrecaoN2.updated_at
+                )
+            )
+            .filter(base_filter)
+        )
         if busca:
             termo = f"%{busca}%"
             q = q.filter(or_(CorrecaoN2.titulo.ilike(termo), CorrecaoN2.sistema.ilike(termo), CorrecaoN2.categoria.ilike(termo), CorrecaoN2.erro.ilike(termo), CorrecaoN2.causa.ilike(termo), CorrecaoN2.correcao.ilike(termo)))
@@ -465,13 +517,74 @@ def register_routes(app):
             "criticidade": CorrecaoN2.criticidade.asc(),
             "acessos": CorrecaoN2.acessos.desc(),
         }
-        q = q.order_by(ordenacoes.get(ordem, CorrecaoN2.updated_at.desc()), CorrecaoN2.updated_at.desc())
-        itens = q.all()
+        q = q.order_by(
+            ordenacoes.get(ordem, CorrecaoN2.updated_at.desc()),
+            CorrecaoN2.updated_at.desc()
+        )
 
-        top_correcoes = CorrecaoN2.query.filter(base_filter).order_by(CorrecaoN2.acessos.desc(), CorrecaoN2.updated_at.desc()).limit(5).all()
-        top_altas = CorrecaoN2.query.filter(base_filter, CorrecaoN2.criticidade == "Alta").order_by(CorrecaoN2.updated_at.desc()).limit(5).all()
+        paginacao = q.paginate(
+            page=pagina,
+            per_page=por_pagina,
+            error_out=False
+        )
+        itens = paginacao.items
 
-        return render_template("correcoes/list.html", itens=itens, busca=busca, categoria=categoria, criticidade=criticidade, ordem=ordem, categorias=categorias, total_correcoes=total_correcoes, alta_count=alta_count, total_categorias=total_categorias, total_acessos=total_acessos, distribuicao_criticidade=distribuicao_criticidade, distribuicao_categorias=distribuicao_categorias, top_correcoes=top_correcoes, top_altas=top_altas, sparkline_total_correcoes=sparkline_total_correcoes, sparkline_altas=sparkline_altas, sparkline_categorias=sparkline_categorias, sparkline_acessos=sparkline_acessos)
+        top_correcoes = (
+            CorrecaoN2.query
+            .options(load_only(
+                CorrecaoN2.id,
+                CorrecaoN2.titulo,
+                CorrecaoN2.acessos,
+                CorrecaoN2.updated_at
+            ))
+            .filter(base_filter)
+            .order_by(
+                CorrecaoN2.acessos.desc(),
+                CorrecaoN2.updated_at.desc()
+            )
+            .limit(5)
+            .all()
+        )
+
+        top_altas = (
+            CorrecaoN2.query
+            .options(load_only(
+                CorrecaoN2.id,
+                CorrecaoN2.titulo,
+                CorrecaoN2.updated_at
+            ))
+            .filter(
+                base_filter,
+                CorrecaoN2.criticidade == "Alta"
+            )
+            .order_by(CorrecaoN2.updated_at.desc())
+            .limit(5)
+            .all()
+        )
+
+        return render_template(
+            "correcoes/list.html",
+            itens=itens,
+            busca=busca,
+            categoria=categoria,
+            criticidade=criticidade,
+            ordem=ordem,
+            categorias=categorias,
+            total_correcoes=total_correcoes,
+            alta_count=alta_count,
+            total_categorias=total_categorias,
+            total_acessos=total_acessos,
+            distribuicao_criticidade=distribuicao_criticidade,
+            distribuicao_categorias=distribuicao_categorias,
+            top_correcoes=top_correcoes,
+            top_altas=top_altas,
+            paginacao=paginacao,
+            por_pagina=por_pagina,
+            sparkline_total_correcoes=sparkline_total_correcoes,
+            sparkline_altas=sparkline_altas,
+            sparkline_categorias=sparkline_categorias,
+            sparkline_acessos=sparkline_acessos
+        )
 
     @app.route("/correcoes/novo", methods=["GET", "POST"])
     @admin_required
@@ -561,6 +674,11 @@ def register_routes(app):
         banco = (request.args.get("banco") or "").strip()
         ordem = (request.args.get("ordem") or "recentes").strip()
 
+        pagina = request.args.get("pagina", 1, type=int)
+        por_pagina = request.args.get("por_pagina", 12, type=int)
+        pagina = max(pagina or 1, 1)
+        por_pagina = min(max(por_pagina or 12, 6), 48)
+
         hoje = datetime.utcnow().date()
         inicio = hoje - timedelta(days=6)
         inicio_dt = datetime.combine(inicio, datetime.min.time())
@@ -568,48 +686,172 @@ def register_routes(app):
 
         resumo = db.session.query(
             func.count(ScriptSQL.id),
-            func.sum(case((or_(ScriptSQL.tipo_banco.ilike("%SQL Server%"), ScriptSQL.tipo_banco.ilike("SQL")), 1), else_=0)),
+            func.sum(
+                case(
+                    (
+                        or_(
+                            ScriptSQL.tipo_banco.ilike("%SQL Server%"),
+                            ScriptSQL.tipo_banco.ilike("SQL")
+                        ),
+                        1
+                    ),
+                    else_=0
+                )
+            ),
             func.coalesce(func.sum(ScriptSQL.acessos), 0),
         ).filter(base_filter).first()
+
         total_scripts = int(resumo[0] or 0)
         sql_server_count = int(resumo[1] or 0)
         total_acessos = int(resumo[2] or 0)
 
-        total_consultas = db.session.query(func.count(ConsultaSQL.id)).join(ScriptSQL, ConsultaSQL.script_id == ScriptSQL.id).filter(base_filter).scalar() or 0
+        total_consultas = (
+            db.session.query(func.count(ConsultaSQL.id))
+            .join(ScriptSQL, ConsultaSQL.script_id == ScriptSQL.id)
+            .filter(base_filter)
+            .scalar()
+            or 0
+        )
 
-        banco_rows = db.session.query(ScriptSQL.tipo_banco, func.count(ScriptSQL.id)).filter(base_filter, ScriptSQL.tipo_banco.isnot(None)).group_by(ScriptSQL.tipo_banco).order_by(ScriptSQL.tipo_banco).all()
+        banco_rows = (
+            db.session.query(
+                ScriptSQL.tipo_banco,
+                func.count(ScriptSQL.id)
+            )
+            .filter(
+                base_filter,
+                ScriptSQL.tipo_banco.isnot(None)
+            )
+            .group_by(ScriptSQL.tipo_banco)
+            .order_by(ScriptSQL.tipo_banco)
+            .all()
+        )
+
         bancos_disponiveis = [nome for nome, _ in banco_rows]
         distribuicao_bancos = [
-            {"nome": nome, "qtd": qtd, "percentual": round(qtd * 100 / total_scripts) if total_scripts else 0}
+            {
+                "nome": nome,
+                "qtd": int(qtd or 0),
+                "percentual": (
+                    round((int(qtd or 0) * 100) / total_scripts)
+                    if total_scripts else 0
+                )
+            }
             for nome, qtd in banco_rows
         ]
 
-        criados_rows = db.session.query(
-            func.date(ScriptSQL.created_at),
-            func.count(ScriptSQL.id),
-            func.sum(case((or_(ScriptSQL.tipo_banco.ilike("%SQL Server%"), ScriptSQL.tipo_banco.ilike("SQL")), 1), else_=0)),
-        ).filter(base_filter, ScriptSQL.created_at >= inicio_dt).group_by(func.date(ScriptSQL.created_at)).all()
-        mapa_criados = {str(d): (int(t or 0), int(sql or 0)) for d, t, sql in criados_rows}
+        criados_rows = (
+            db.session.query(
+                func.date(ScriptSQL.created_at),
+                func.count(ScriptSQL.id),
+                func.sum(
+                    case(
+                        (
+                            or_(
+                                ScriptSQL.tipo_banco.ilike("%SQL Server%"),
+                                ScriptSQL.tipo_banco.ilike("SQL")
+                            ),
+                            1
+                        ),
+                        else_=0
+                    )
+                ),
+            )
+            .filter(
+                base_filter,
+                ScriptSQL.created_at >= inicio_dt
+            )
+            .group_by(func.date(ScriptSQL.created_at))
+            .all()
+        )
+
+        mapa_criados = {
+            str(data): (int(total or 0), int(total_sql or 0))
+            for data, total, total_sql in criados_rows
+        }
+
         sparkline_total_scripts = []
         sparkline_sql_server = []
-        for i in range(7):
-            total, sql = mapa_criados.get(str(inicio + timedelta(days=i)), (0, 0))
-            sparkline_total_scripts.append(total)
-            sparkline_sql_server.append(sql)
 
-        consultas_rows = db.session.query(func.date(ConsultaSQL.created_at), func.count(ConsultaSQL.id)).filter(ConsultaSQL.created_at >= inicio_dt).group_by(func.date(ConsultaSQL.created_at)).all()
-        mapa_consultas = {str(d): int(q or 0) for d, q in consultas_rows}
-        sparkline_consultas = [mapa_consultas.get(str(inicio + timedelta(days=i)), 0) for i in range(7)]
+        for indice in range(7):
+            chave = str(inicio + timedelta(days=indice))
+            total_dia, sql_dia = mapa_criados.get(chave, (0, 0))
+            sparkline_total_scripts.append(total_dia)
+            sparkline_sql_server.append(sql_dia)
 
-        acessos_rows = db.session.query(ScriptAcesso.data_acesso, func.sum(ScriptAcesso.quantidade)).filter(ScriptAcesso.data_acesso >= inicio).group_by(ScriptAcesso.data_acesso).all()
-        mapa_acessos = {d: int(q or 0) for d, q in acessos_rows}
-        sparkline_acessos = [mapa_acessos.get(inicio + timedelta(days=i), 0) for i in range(7)]
-        sparkline_dias = [(inicio + timedelta(days=i)).strftime("%d/%m") for i in range(7)]
+        consultas_rows = (
+            db.session.query(
+                func.date(ConsultaSQL.created_at),
+                func.count(ConsultaSQL.id)
+            )
+            .filter(ConsultaSQL.created_at >= inicio_dt)
+            .group_by(func.date(ConsultaSQL.created_at))
+            .all()
+        )
 
-        q = ScriptSQL.query.options(selectinload(ScriptSQL.consultas)).filter(base_filter)
+        mapa_consultas = {
+            str(data): int(quantidade or 0)
+            for data, quantidade in consultas_rows
+        }
+
+        sparkline_consultas = [
+            mapa_consultas.get(str(inicio + timedelta(days=indice)), 0)
+            for indice in range(7)
+        ]
+
+        acessos_rows = (
+            db.session.query(
+                ScriptAcesso.data_acesso,
+                func.sum(ScriptAcesso.quantidade)
+            )
+            .filter(ScriptAcesso.data_acesso >= inicio)
+            .group_by(ScriptAcesso.data_acesso)
+            .all()
+        )
+
+        mapa_acessos = {
+            data: int(quantidade or 0)
+            for data, quantidade in acessos_rows
+        }
+
+        sparkline_acessos = [
+            mapa_acessos.get(inicio + timedelta(days=indice), 0)
+            for indice in range(7)
+        ]
+
+        sparkline_dias = [
+            (inicio + timedelta(days=indice)).strftime("%d/%m")
+            for indice in range(7)
+        ]
+
+        q = (
+            ScriptSQL.query
+            .options(
+                load_only(
+                    ScriptSQL.id,
+                    ScriptSQL.titulo,
+                    ScriptSQL.tipo_banco,
+                    ScriptSQL.descricao,
+                    ScriptSQL.observacoes,
+                    ScriptSQL.acessos,
+                    ScriptSQL.created_at,
+                    ScriptSQL.updated_at
+                )
+            )
+            .filter(base_filter)
+        )
+
         if busca:
             termo = f"%{busca}%"
-            q = q.filter(or_(ScriptSQL.titulo.ilike(termo), ScriptSQL.tipo_banco.ilike(termo), ScriptSQL.descricao.ilike(termo), ScriptSQL.observacoes.ilike(termo)))
+            q = q.filter(
+                or_(
+                    ScriptSQL.titulo.ilike(termo),
+                    ScriptSQL.tipo_banco.ilike(termo),
+                    ScriptSQL.descricao.ilike(termo),
+                    ScriptSQL.observacoes.ilike(termo)
+                )
+            )
+
         if banco:
             q = q.filter(ScriptSQL.tipo_banco == banco)
 
@@ -618,17 +860,106 @@ def register_routes(app):
         elif ordem == "za":
             q = q.order_by(ScriptSQL.titulo.desc())
         elif ordem == "banco":
-            q = q.order_by(ScriptSQL.tipo_banco.asc(), ScriptSQL.titulo.asc())
+            q = q.order_by(
+                ScriptSQL.tipo_banco.asc(),
+                ScriptSQL.titulo.asc()
+            )
         elif ordem == "acessos":
-            q = q.order_by(ScriptSQL.acessos.desc(), ScriptSQL.updated_at.desc())
+            q = q.order_by(
+                ScriptSQL.acessos.desc(),
+                ScriptSQL.updated_at.desc()
+            )
         else:
             q = q.order_by(ScriptSQL.updated_at.desc())
-        itens = q.all()
 
-        top_scripts = ScriptSQL.query.filter(base_filter).order_by(ScriptSQL.acessos.desc(), ScriptSQL.updated_at.desc()).limit(5).all()
-        top_consultas = ScriptSQL.query.options(selectinload(ScriptSQL.consultas)).filter(base_filter).outerjoin(ConsultaSQL).group_by(ScriptSQL.id).order_by(func.count(ConsultaSQL.id).desc(), ScriptSQL.updated_at.desc()).limit(5).all()
+        paginacao = q.paginate(
+            page=pagina,
+            per_page=por_pagina,
+            error_out=False
+        )
+        itens = paginacao.items
 
-        return render_template("scripts/list.html", itens=itens, busca=busca, banco=banco, ordem=ordem, bancos_disponiveis=bancos_disponiveis, total_scripts=total_scripts, sql_server_count=sql_server_count, total_consultas=int(total_consultas), total_acessos=total_acessos, favoritos=0, distribuicao_bancos=distribuicao_bancos, top_scripts=top_scripts, top_consultas=top_consultas, sparkline_total_scripts=sparkline_total_scripts, sparkline_sql_server=sparkline_sql_server, sparkline_consultas=sparkline_consultas, sparkline_acessos=sparkline_acessos, sparkline_dias=sparkline_dias)
+        ids_scripts = [item.id for item in itens]
+        contagens_consultas = {}
+
+        if ids_scripts:
+            contagem_rows = (
+                db.session.query(
+                    ConsultaSQL.script_id,
+                    func.count(ConsultaSQL.id)
+                )
+                .filter(ConsultaSQL.script_id.in_(ids_scripts))
+                .group_by(ConsultaSQL.script_id)
+                .all()
+            )
+
+            contagens_consultas = {
+                script_id: int(quantidade or 0)
+                for script_id, quantidade in contagem_rows
+            }
+
+        top_scripts = (
+            ScriptSQL.query
+            .options(
+                load_only(
+                    ScriptSQL.id,
+                    ScriptSQL.titulo,
+                    ScriptSQL.acessos,
+                    ScriptSQL.updated_at
+                )
+            )
+            .filter(base_filter)
+            .order_by(
+                ScriptSQL.acessos.desc(),
+                ScriptSQL.updated_at.desc()
+            )
+            .limit(5)
+            .all()
+        )
+
+        top_consultas = (
+            db.session.query(
+                ScriptSQL,
+                func.count(ConsultaSQL.id).label("quantidade_consultas")
+            )
+            .outerjoin(
+                ConsultaSQL,
+                ConsultaSQL.script_id == ScriptSQL.id
+            )
+            .filter(base_filter)
+            .group_by(ScriptSQL.id)
+            .order_by(
+                func.count(ConsultaSQL.id).desc(),
+                ScriptSQL.updated_at.desc()
+            )
+            .limit(5)
+            .all()
+        )
+
+        return render_template(
+            "scripts/list.html",
+            itens=itens,
+            busca=busca,
+            banco=banco,
+            ordem=ordem,
+            bancos_disponiveis=bancos_disponiveis,
+            total_scripts=total_scripts,
+            sql_server_count=sql_server_count,
+            total_consultas=int(total_consultas),
+            total_acessos=total_acessos,
+            favoritos=0,
+            distribuicao_bancos=distribuicao_bancos,
+            top_scripts=top_scripts,
+            top_consultas=top_consultas,
+            contagens_consultas=contagens_consultas,
+            paginacao=paginacao,
+            por_pagina=por_pagina,
+            sparkline_total_scripts=sparkline_total_scripts,
+            sparkline_sql_server=sparkline_sql_server,
+            sparkline_consultas=sparkline_consultas,
+            sparkline_acessos=sparkline_acessos,
+            sparkline_dias=sparkline_dias
+        )
 
     @app.route("/scripts/novo", methods=["GET", "POST"])
     @admin_required
@@ -739,6 +1070,11 @@ def register_routes(app):
         tipo = (request.args.get("tipo") or "").strip()
         ordem = (request.args.get("ordem") or "recentes").strip()
 
+        pagina = request.args.get("pagina", 1, type=int)
+        por_pagina = request.args.get("por_pagina", 12, type=int)
+        pagina = max(pagina or 1, 1)
+        por_pagina = min(max(por_pagina or 12, 6), 48)
+
         hoje = datetime.utcnow().date()
         inicio = hoje - timedelta(days=6)
         inicio_dt = datetime.combine(inicio, datetime.min.time())
@@ -781,7 +1117,22 @@ def register_routes(app):
             mapa_top = {d: int(q or 0) for d, q in top_rows}
             sparkline_top = [mapa_top.get(inicio + timedelta(days=i), 0) for i in range(7)]
 
-        q = ArquivoDownload.query.filter(*base_filter)
+        q = (
+            ArquivoDownload.query
+            .options(
+                load_only(
+                    ArquivoDownload.id,
+                    ArquivoDownload.modulo,
+                    ArquivoDownload.nome,
+                    ArquivoDownload.tipo,
+                    ArquivoDownload.link_download,
+                    ArquivoDownload.downloads,
+                    ArquivoDownload.created_at,
+                    ArquivoDownload.updated_at
+                )
+            )
+            .filter(*base_filter)
+        )
         if busca:
             termo = f"%{busca}%"
             q = q.filter(or_(ArquivoDownload.nome.ilike(termo), ArquivoDownload.tipo.ilike(termo)))
@@ -798,11 +1149,68 @@ def register_routes(app):
         else:
             q = q.order_by(ArquivoDownload.updated_at.desc())
 
-        itens = q.all()
-        top_downloads = ArquivoDownload.query.filter(*base_filter).order_by(ArquivoDownload.downloads.desc(), ArquivoDownload.updated_at.desc()).limit(5).all()
-        recentes = ArquivoDownload.query.filter(*base_filter).order_by(ArquivoDownload.created_at.desc()).limit(5).all()
+        paginacao = q.paginate(
+            page=pagina,
+            per_page=por_pagina,
+            error_out=False
+        )
+        itens = paginacao.items
 
-        return render_template("datasync/list.html", titulo=titulo, modulo=modulo, itens=itens, busca=busca, tipo=tipo, ordem=ordem, tipos_disponiveis=tipos_disponiveis, total_ferramentas=total_ferramentas, total_downloads=total_downloads, total_tipos=total_tipos, mais_baixada=mais_baixada, distribuicao_tipos=distribuicao_tipos, top_downloads=top_downloads, recentes=recentes, sparkline_ferramentas=sparkline_ferramentas, sparkline_downloads=sparkline_downloads, sparkline_tipos=sparkline_tipos, sparkline_top=sparkline_top)
+        top_downloads = (
+            ArquivoDownload.query
+            .options(load_only(
+                ArquivoDownload.id,
+                ArquivoDownload.modulo,
+                ArquivoDownload.nome,
+                ArquivoDownload.downloads,
+                ArquivoDownload.updated_at
+            ))
+            .filter(*base_filter)
+            .order_by(
+                ArquivoDownload.downloads.desc(),
+                ArquivoDownload.updated_at.desc()
+            )
+            .limit(5)
+            .all()
+        )
+
+        recentes = (
+            ArquivoDownload.query
+            .options(load_only(
+                ArquivoDownload.id,
+                ArquivoDownload.modulo,
+                ArquivoDownload.nome,
+                ArquivoDownload.created_at
+            ))
+            .filter(*base_filter)
+            .order_by(ArquivoDownload.created_at.desc())
+            .limit(5)
+            .all()
+        )
+
+        return render_template(
+            "datasync/list.html",
+            titulo=titulo,
+            modulo=modulo,
+            itens=itens,
+            busca=busca,
+            tipo=tipo,
+            ordem=ordem,
+            tipos_disponiveis=tipos_disponiveis,
+            total_ferramentas=total_ferramentas,
+            total_downloads=total_downloads,
+            total_tipos=total_tipos,
+            mais_baixada=mais_baixada,
+            distribuicao_tipos=distribuicao_tipos,
+            top_downloads=top_downloads,
+            recentes=recentes,
+            paginacao=paginacao,
+            por_pagina=por_pagina,
+            sparkline_ferramentas=sparkline_ferramentas,
+            sparkline_downloads=sparkline_downloads,
+            sparkline_tipos=sparkline_tipos,
+            sparkline_top=sparkline_top
+        )
 
     @app.route("/datasync")
     def datasync():
